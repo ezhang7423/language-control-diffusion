@@ -1,0 +1,13 @@
+# This file contains values from Cookiecutter
+
+default_context:
+  project_name: "language-control-diffusion"
+  project_description: "Code for efficiently generalizing through space, time, and tasks"
+  organization: "ezhang7423"
+  license: "MIT"
+  minimal_python_version: 3.8
+  github_name: "ezhang7423"
+  email: "ete@ucsb.edu"
+  version: "0.1.0"
+  line_length: "88"
+  create_example_template: "cli"
