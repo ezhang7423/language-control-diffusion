@@ -2,7 +2,7 @@
 
 default_context:
   project_name: "language-control-diffusion"
-  project_description: "Code for efficiently generalizing through space, time, and tasks"
+  project_description: "Code for efficiently scaling through space, time, and tasks"
   organization: "ezhang7423"
   license: "MIT"
   minimal_python_version: 3.8

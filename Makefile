@@ -1,10 +1,16 @@
+.ONESHELL:
+
 #* Variables
-SHELL := /usr/bin/env bash
+SHELL := /usr/bin/bash
 PYTHON := python
 PYTHONPATH := `pwd`
+CONDA != type -P mamba >/dev/null 2>&1 && echo "mamba" || echo "conda"
+CONDA_ACTIVATE = source $$(conda info --base)/etc/profile.d/conda.sh ; conda activate ; conda activate
+CONDA_ACTIVATE_2 = source $$(conda info --base)/etc/profile.d/$(CONDA).sh ; $(CONDA) activate ; $(CONDA) activate # hack to make work with mamba
+
 
 #* Docker variables
-IMAGE := language_control_diffusion
+IMAGE := lcd
 VERSION := latest
 
 #* Poetry
@@ -19,9 +25,38 @@ poetry-remove:
 #* Installation
 .PHONY: install
 install:
+	@set -e
+	@export OG_DIR="$$(pwd -P)"
+
+	git -c submodule."submodules/hulc-data".update=none submodule update --init --recursive;
+	@if [ -z "$(NO_DATA)" ]; then\
+		echo "Downloading data...";\
+		git submodule update --init --recursive ./submodules/hulc-data;\
+	fi
+	! type -P poetry &> /dev/null && curl -sSL https://install.python-poetry.org | python3 -
+	! type -P $(CONDA) &> /dev/null && { echo "Please install mamba to continue (https://mamba.readthedocs.io/en/latest/installation.html)"; exit 1; }
+
+	# install lcd conda environment
+	$(CONDA) create -n lcd python=3.8 -y
+	$(CONDA_ACTIVATE) lcd
+	$(CONDA_ACTIVATE_2) lcd
+
+	type python
+	
+	pip install setuptools==57.5.0
+	
+	$(CONDA) install -c fvcore -c iopath -c conda-forge fvcore iopath -y
+	$(CONDA) install pytorch3d=0.7.2 -c pytorch3d -y
+
+	# install hulc-baseline
+	cd ./submodules/hulc-baseline
+	. install.sh
+
+	# install poetry environment
+	cd $${OG_DIR}
 	poetry lock -n && poetry export --without-hashes > requirements.txt
 	poetry install -n
-	-poetry run mypy --install-types --non-interactive ./
+
 
 .PHONY: pre-commit-install
 pre-commit-install:
@@ -30,9 +65,9 @@ pre-commit-install:
 #* Formatters
 .PHONY: codestyle
 codestyle:
-	poetry run pyupgrade --exit-zero-even-if-changed --py38-plus **/*.py
-	poetry run isort --settings-path pyproject.toml ./
-	poetry run black --config pyproject.toml ./
+	poetry run pyupgrade --exit-zero-even-if-changed --py38-plus ./src/**/*.py
+	poetry run isort --settings-path pyproject.toml ./src
+	poetry run black --config pyproject.toml ./src
 
 .PHONY: formatting
 formatting: codestyle
@@ -40,24 +75,24 @@ formatting: codestyle
 #* Linting
 .PHONY: test
 test:
-	PYTHONPATH=$(PYTHONPATH) poetry run pytest -c pyproject.toml --cov-report=html --cov=language_control_diffusion tests/
+	PYTHONPATH=$(PYTHONPATH) poetry run pytest -c pyproject.toml --cov-report=html --cov=lcd tests/
 	poetry run coverage-badge -o assets/images/coverage.svg -f
 
 .PHONY: check-codestyle
 check-codestyle:
-	poetry run isort --diff --check-only --settings-path pyproject.toml ./
-	poetry run black --diff --check --config pyproject.toml ./
-	poetry run darglint --verbosity 2 language_control_diffusion tests
+	poetry run isort --diff --check-only --settings-path pyproject.toml ./src
+	poetry run black --diff --check --config pyproject.toml ./src
+	poetry run darglint --verbosity 2 lcd tests
 
 .PHONY: mypy
 mypy:
-	poetry run mypy --config-file pyproject.toml ./
+	poetry run mypy --config-file pyproject.toml ./src
 
 .PHONY: check-safety
 check-safety:
 	poetry check
 	poetry run safety check --full-report
-	poetry run bandit -ll --recursive language_control_diffusion tests
+	poetry run bandit -ll --recursive lcd tests
 
 .PHONY: lint
 lint: test check-codestyle mypy check-safety

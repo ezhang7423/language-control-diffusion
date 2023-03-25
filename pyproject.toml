@@ -1,20 +1,27 @@
 # Poetry pyproject.toml: https://python-poetry.org/docs/pyproject/
 [build-system]
-requires = ["poetry_core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+requires = ["poetry_core>=1.0.0"]
 
 [tool.poetry]
-name = "language-control-diffusion"
-version = "0.1.0"
-description = "Code for efficiently generalizing through space, time, and tasks"
-readme = "README.md"
 authors = ["ezhang7423 <ete@ucsb.edu>"]
-license = "MIT"
-repository = "https://github.com/ezhang7423/language-control-diffusion"
+description = "Code for efficiently scaling through space, time, and tasks"
 homepage = "https://github.com/ezhang7423/language-control-diffusion"
+license = "MIT"
+name = "lcd"
+readme = "README.md"
+repository = "https://github.com/ezhang7423/language-control-diffusion"
+version = "0.1.0"
 
 # Keywords description https://python-poetry.org/docs/pyproject/#keywords
-keywords = ["rl", "control", "diffusion", "language", "generalization", "reinforcement-learning"] 
+keywords = [
+  "rl",
+  "control",
+  "diffusion",
+  "language",
+  "generalization",
+  "reinforcement-learning",
+]
 
 # Pypi classifiers: https://pypi.org/classifiers/
 classifiers = [
@@ -25,42 +32,59 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
 ]
-
-[tool.poetry.scripts]
-# Entry points for the package https://python-poetry.org/docs/pyproject/#scripts
-"language-control-diffusion" = "language_control_diffusion.__main__:app"
 
 [tool.poetry.dependencies]
 python = "~3.8"
 
-typer = {extras = ["all"], version = "^0.4.0"}
 rich = "^10.14.0"
+typer = {extras = ["all"], version = "^0.7.0"}
+numpy = "1.23.5"
+matplotlib = "3.3.4"
+typed-argument-parser = "^1.8.0"
+scikit-image = "0.17.2"
+scikit-video = "1.1.11"
+gitpython = "^3.1.31"
+einops = "^0.6.0"
+ffmpeg = "^1.4"
+ffprobe = "^0.5"
+pillow = "^9.4.0"
+tqdm = "^4.65.0"
+pandas = "^1.5.3"
+wandb = "^0.14.0"
+cryptography = "^39.0.2"
+loguru = "^0.6.0"
 
-[tool.poetry.dev-dependencies]
-bandit = "^1.7.1"
-black = {version = "22.3.0", allow-prereleases = true}
+[tool.poetry.scripts]
+# Entry points for the package https://python-poetry.org/docs/pyproject/#scripts
+"lcd" = "lcd.__main__:main"
+
+
+[tool.poetry.group.dev.dependencies]
+black = {version = "^23.1.0", allow-prereleases = true}
+bandit = "^1.7.5"
 darglint = "^1.8.1"
-isort = {extras = ["colors"], version = "^5.10.1"}
-mypy = "^0.910"
-mypy-extensions = "^0.4.3"
-pre-commit = "^2.15.0"
-pydocstyle = "^6.1.1"
-pylint = "^2.11.1"
-pytest = "^6.2.5"
-pyupgrade = "^2.29.1"
-safety = "^1.10.3"
-coverage = "^6.1.2"
+isort = {extras = ["colors"], version = "^5.12.0"}
+mypy = "^1.1.1"
+pre-commit = "^3.2.0"
+pydocstyle = "^6.3.0"
+pylint = "^2.17.1"
+pytest = "^7.2.2"
+pyupgrade = "^3.3.1"
+safety = "^2.3.5"
+coverage = "^7.2.2"
 coverage-badge = "^1.1.0"
-pytest-html = "^3.1.1"
-pytest-cov = "^3.0.0"
+pytest-html = "^3.2.0"
+pytest-cov = "^4.0.0"
+ipython = "^8.11.0"
+pyflyby = "^1.8.2"
+magic-wormhole = "^0.12.0"
 
 [tool.black]
 # https://github.com/psf/black
-target-version = ["py38"]
-line-length = 88
 color = true
+line-length = 88
+target-version = ["py38"]
 
 exclude = '''
 /(
@@ -80,30 +104,43 @@ exclude = '''
 
 [tool.isort]
 # https://github.com/timothycrosley/isort/
-py_version = 38
 line_length = 88
+py_version = 38
 
-known_typing = ["typing", "types", "typing_extensions", "mypy", "mypy_extensions"]
-sections = ["FUTURE", "TYPING", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
-include_trailing_comma = true
-profile = "black"
-multi_line_output = 3
-indent = 4
 color_output = true
+include_trailing_comma = true
+indent = 4
+known_typing = [
+  "typing",
+  "types",
+  "typing_extensions",
+  "mypy",
+  "mypy_extensions",
+]
+multi_line_output = 3
+profile = "black"
+sections = [
+  "FUTURE",
+  "TYPING",
+  "STDLIB",
+  "THIRDPARTY",
+  "FIRSTPARTY",
+  "LOCALFOLDER",
+]
 
 [tool.mypy]
 # https://mypy.readthedocs.io/en/latest/config_file.html#using-a-pyproject-toml-file
-python_version = 3.8
-pretty = true
-show_traceback = true
 color_output = true
+pretty = true
+python_version = 3.8
+show_traceback = true
 
-allow_redefinition = false
+allow_redefinition = true
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
 ignore_missing_imports = true
-implicit_reexport = false
+implicit_reexport = true
 no_implicit_optional = true
 show_column_numbers = true
 show_error_codes = true
@@ -117,12 +154,26 @@ warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
-
 [tool.pytest.ini_options]
 # https://docs.pytest.org/en/6.2.x/customize.html#pyproject-toml
 # Directories that are not visited by pytest collector:
-norecursedirs =["hooks", "*.egg", ".eggs", "dist", "build", "docs", ".tox", ".git", "__pycache__"]
-doctest_optionflags = ["NUMBER", "NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
+doctest_optionflags = [
+  "NUMBER",
+  "NORMALIZE_WHITESPACE",
+  "IGNORE_EXCEPTION_DETAIL",
+]
+norecursedirs = [
+  "hooks",
+  "*.egg",
+  ".eggs",
+  "dist",
+  "build",
+  "docs",
+  ".tox",
+  ".git",
+  "__pycache__",
+]
+pythonpath = ["src"]
 
 # Extra options:
 addopts = [
@@ -136,7 +187,7 @@ addopts = [
 source = ["tests"]
 
 [coverage.paths]
-source = "language-control-diffusion"
+source = "src/lcd"
 
 [coverage.run]
 branch = true
