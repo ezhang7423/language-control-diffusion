@@ -4,9 +4,6 @@ from os.path import join as j
 
 import torch
 
-p = "/home/ubuntu/vanilla-hulc-larel-baseline/evaluation"
-files = [j(p, f) for f in os.listdir(p) if f.startswith("gen")]
-os.chdir(p)
 
 # %%
 """
@@ -109,20 +106,19 @@ def aggregate(states):
 # ? AWS FROM SCRATCH
 # %%
 from collections import defaultdict
-
+from os.path import join as j
 import tqdm
-
-for seed in [12, 13, 42]:
+for seed in [0, 42, 777]:
     seed = str(seed)
-    p = "/home/ubuntu/vanilla-hulc-larel-baseline/evaluation"
-    files = [j(p, f) for f in os.listdir(p) if f.startswith(f"TG{seed}")]
+    p = "/home/ubuntu/lcd-neurips/submodules/hulc-data/hulc-trajectories/"
+    files = [j(p, f) for f in os.listdir(p) if seed in f]
     os.chdir(p)
 
     ret = defaultdict(list)
-    for f in tqdm.tqdm(files):
+    for f in files:
         try:
             f = torch.load(f, map_location="cpu")
-            for traj in f:
+            for traj in tqdm.tqdm(f):
                 for subtask in traj:
                     # goal_space_states = gen_goal(subtask["states"])
                     ret["states"].append(subtask["states"])
@@ -138,8 +134,7 @@ for seed in [12, 13, 42]:
             inter["goal_ann"] = np.array(ret["goal_ann"])
         except Exception as e:
             print("*" * 50)
-            print(f)
             print(e)
             print("*" * 50)
 
-        torch.save(inter, f"{seed}_all_trajectories.pt")
+        torch.save(inter, f"_{seed}_all_trajectories.pt")
