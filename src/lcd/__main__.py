@@ -9,7 +9,7 @@ from lcd.utils.setup import abspath  # for monkeypatches
 
 # Define the directory path containing the Python modules to import
 apps_dir = abspath() / "apps"
-app: typer.Typer = typer.Typer(name="lcd", no_args_is_help=True)
+app: typer.Typer = typer.Typer(name="lcd", no_args_is_help=True, pretty_exceptions_show_locals=False)
 
 
 def main():

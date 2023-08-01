@@ -18,7 +18,8 @@ state = AttriDict()
 def eval_pipeline():
     logger.debug(f"{args=}")
     results, histories = evaluate_policy(state, args)
-    model_id = f"{args.train_folder=}_{args.seed=}"
+    train_folder=args.train_folder.replace('/', '-').replace('\\','')
+    model_id = f"train_folder={train_folder}_{args.seed=}"
     if args.diffusion_path is not None:
         model_id += f"_{args.diffusion_path=}_{args.diffusion_epoch=}"
     print_and_save(results, args, histories, model_id)
