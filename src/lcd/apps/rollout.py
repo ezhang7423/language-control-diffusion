@@ -1,3 +1,4 @@
+import functools
 from pathlib import Path
 
 import torch
@@ -24,8 +25,7 @@ def eval_pipeline():
     print_and_save(results, args, histories, model_id)
 
 
-@app.callback()
-def main(
+def set_state(
     dataset_path: str = str(HULC_PATH / "dataset/task_D_D"),
     train_folder: str = str(DATA_PATH / "hulc-baselines-30"),
     seed: int = 12,
@@ -33,6 +33,7 @@ def main(
     log_dir: str = None,
     device: int = 0,
     num_sequences: int = 1000,
+    state: AttriDict = None,
 ):
     """
     Rollout in the environment for evaluation or dataset collection
@@ -54,6 +55,8 @@ def main(
         lang_embeddings=None,
         device_id=args.device,
     )
+    
+main = app.callback(functools.partial(set_state, state=state))
 
 
 @app.command()
