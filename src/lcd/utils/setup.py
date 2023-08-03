@@ -59,20 +59,22 @@ class Parser(Tap):
         print(f"[ utils/setup ] Saved args to {fullpath}")
         super().save(fullpath, skip_unpicklable=True)
 
-    def parse_args(self, experiment=None):
+    def parse_args(self, experiment=None, add_extras=True):
         args = super().parse_args(known_only=True)
         ## if not loading from a config script, skip the result of the setup
         if not hasattr(args, "config"):
             return args
         args = self.read_config(args, experiment)
-        self.add_extras(args)
+        if add_extras:
+            self.add_extras(args)
         self.eval_fstrings(args)
         self.set_seed(args)
         self.get_commit(args)
         self.set_loadbase(args)
         self.generate_exp_name(args)
-        self.mkdir(args)
-        self.save_diff(args)
+        if add_extras:
+            self.mkdir(args)
+            self.save_diff(args)
         return args
 
     def read_config(self, args, experiment):

@@ -70,11 +70,16 @@ class ActionTransformer(nn.Module):
 
 class TransformerEvaluationWrapper(torch.nn.Module):
     def __init__(self, model, device='cpu') -> None:
+        super().__init__()
         self.model = model
         self.model.to(device)
+        self.device = device
     
-    def forward(self, cond, inpaint):
-        return self.model(cond, inpaint)
+    def forward(self, lang, state):
+        if len(state.shape) == 1:
+            state = state[None, :]
+        ret =  self.model(state.to(self.device), lang.to(self.device))
+        return ret
 
 if __name__ == '__main__':
     bsz = 10
