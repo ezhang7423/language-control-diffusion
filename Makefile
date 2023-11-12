@@ -1,7 +1,7 @@
 .ONESHELL:
 
 #* Variables
-SHELL := /usr/bin/bash
+SHELL := bash
 PYTHON := python
 PYTHONPATH := `pwd`
 CONDA != type -P mamba >/dev/null 2>&1 && echo "mamba" || echo "conda"
@@ -16,11 +16,11 @@ VERSION := latest
 #* Poetry
 .PHONY: poetry-download
 poetry-download:
-	curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | $(PYTHON) -
+	curl -sSL https://install.python-poetry.org | $(PYTHON) -
 
 .PHONY: poetry-remove
 poetry-remove:
-	curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | $(PYTHON) - --uninstall
+	curl -sSL https://install.python-poetry.org | $(PYTHON) - --uninstall
 
 #* Installation
 .PHONY: install
