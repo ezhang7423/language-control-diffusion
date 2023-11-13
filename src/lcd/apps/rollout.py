@@ -17,7 +17,7 @@ state = AttriDict()
 
 
 def eval_pipeline():
-    logger.debug(f"{args=}")
+    # logger.debug(f"{args=}")
     results, histories = evaluate_policy(state, args)
     model_id = f"{args.train_folder=}_{args.seed=}"
     if args.diffusion_path is not None:
@@ -33,20 +33,21 @@ def set_state(
     log_dir: str = None,
     device: int = 0,
     num_sequences: int = 1000,
-    state: AttriDict = None,
+    _state: AttriDict = None,
 ):
+    if _state is None:
+        _state = state
     """
     Rollout in the environment for evaluation or dataset collection
     """
     ep_len = 360
     args.update(locals())
-
     # *******
     (
-        state.model,
-        state.env,
+        _state.model,
+        _state.env,
         _,
-        state.lang_embeddings,
+        _state.lang_embeddings,
     ) = get_default_model_and_env(
         args.train_folder,
         args.dataset_path,
@@ -56,7 +57,7 @@ def set_state(
         device_id=args.device,
     )
     
-main = app.callback(functools.partial(set_state, state=state))
+main = app.callback(functools.partial(set_state, _state=state))
 
 
 @app.command()
@@ -69,8 +70,8 @@ def lcd(
     """
     Rollout with LCD
     """
+    # set_state(_state=state)
     args.update(locals())
-
     # *******
     if dm__args:
         args.dm = DiffusionModelWrapper(
@@ -85,7 +86,7 @@ def lcd(
             model_path__epoch=(args.diffusion_path, args.diffusion_epoch),
         )
 
-    state.lang_embeddings = torch.load(DATA_PATH / "t5-v1_1-xxl_embeddings.pt")
+    state.lang_embeddings = torch.load(DATA_PATH / "clip-rn50_embeddings.pt")
 
     eval_pipeline()
 

@@ -93,7 +93,7 @@ class TemporalUnet(nn.Module):
                         ResidualTemporalBlock(
                             dim_out, dim_out, embed_dim=time_dim, horizon=horizon
                         ),
-                        CrossAttention(dim_out, cross_attention_dim=4096)
+                        CrossAttention(dim_out, cross_attention_dim=1024)
                         if attention
                         else nn.Identity(),
                         Downsample1d(dim_out)
@@ -111,7 +111,7 @@ class TemporalUnet(nn.Module):
             mid_dim, mid_dim, embed_dim=time_dim, horizon=horizon
         )
         self.mid_attn = (
-            CrossAttention(mid_dim, cross_attention_dim=4096)
+            CrossAttention(mid_dim, cross_attention_dim=1024)
             if attention
             else nn.Identity()
         )
@@ -131,7 +131,7 @@ class TemporalUnet(nn.Module):
                         ResidualTemporalBlock(
                             dim_in, dim_in, embed_dim=time_dim, horizon=horizon
                         ),
-                        CrossAttention(dim_in, cross_attention_dim=4096)
+                        CrossAttention(dim_in, cross_attention_dim=1024)
                         if attention
                         else nn.Identity(),
                         Upsample1d(dim_in)

@@ -36,7 +36,7 @@ dataset_config = utils.Config(
     use_padding=args.use_padding,
     max_path_length=args.max_path_length,
     frame_offset=args.frame_offset,
-    lang_embeds=DATA_PATH / "t5-v1_1-xxl_embeddings.pt",
+    lang_embeds=DATA_PATH / "clip-rn50_embeddings.pt",
     task_to_ann=DATA_PATH / "annotations.json",
     buf=DATA_PATH / f"hulc-trajectories/{args.seed}_all_trajectories.pt",
     observation_dim=args.observation_dim,
@@ -142,7 +142,7 @@ if args.wandb:
 
 
 def eval_model(num_evals, epoch=0):
-    rollout.main(seed=args.seed, num_sequences=num_evals)
+    rollout.set_state(seed=args.seed, num_sequences=num_evals)
     dm_args = args.as_dict()
     dm_args["epoch"] = epoch
     rollout.lcd(dm__args=(diffusion, dm_args))
