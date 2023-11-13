@@ -19,7 +19,7 @@ from lcd.apps import rollout
 from lcd.datasets.sequence import Batch
 from lcd.utils.arrays import batch_to_device
 from lcd.utils.training import cycle
-from lcd.models.transformer import ActionTransformer, TransformerEvaluationWrapper
+from lcd.models.ablations import ActionMLP, ActionTransformer, AblationEvaluationWrapper
 from torchinfo import summary
 from lcd.utils.config import AttriDict
 from lcd.utils.eval import evaluate_policy, print_and_save
@@ -56,6 +56,7 @@ def main(
     lr: float = 2e-5,
     use_wandb: bool = False,
     skip_eval: bool = False,
+    model: str = 'transformer',
 ):    
     args, _, _, values = inspect.getargvalues(inspect.currentframe())
     args = AttriDict(
@@ -81,14 +82,20 @@ def main(
         wandb.init(
             project="vanilla-diffuser",
             entity="lang-diffusion",
-            name=f"hulc-transformer-ablation-single",
+            name=f"hulc-{args.model}-ablation-single",
             config=vars(args),
         )
 
     # model
-    model = ActionTransformer(
-        in_features=32, out_features=32, num_layers=depth, decoder_hidden_size=width
-    )
+    if model == 'transformer':
+        model = ActionTransformer(
+            in_features=32, out_features=32, num_layers=depth, decoder_hidden_size=width
+        )
+    elif model == 'mlp':
+        model = ActionMLP(in_features=32, out_features=32, num_layers=depth)
+    else:
+        raise NotImplementedError('This model architecture is not supported')
+    
     summary(model)
 
     # dataset
@@ -178,14 +185,14 @@ def evaluate(eval_arg: eval_args):
     args.update(
         {
             "num_sequences": eval_arg.num_sequences,
-            "dm": TransformerEvaluationWrapper(eval_arg.model, device=device),
+            "dm": AblationEvaluationWrapper(eval_arg.model, device=device),
             "ep_len": 360,
             "subgoal_interval": 16,
         }
     )
 
     results, histories = evaluate_policy(eval_arg.eval_state, args)
-    model_id = f"transformer-ablation-{args}"
+    model_id = f"{args.model}-ablation-{args}"
 
     eval_results = print_and_save(results, args, histories, model_id)
 
@@ -196,10 +203,11 @@ def evaluate(eval_arg: eval_args):
 if __name__ == "__main__":
     
     main(
-        width=16384,
-        depth=24,
+        width=2048,
+        depth=8,
         # batch_size=72,
         # skip_eval=True,
         # lr=2e-5,
-        use_wandb=True
+        use_wandb=True,
+        model='mlp'
     )

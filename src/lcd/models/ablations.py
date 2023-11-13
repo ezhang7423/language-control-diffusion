@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from typing import Tuple
-
+from rich import print
 
 class ActionTransformer(nn.Module):
     def __init__(
@@ -68,7 +68,74 @@ class ActionTransformer(nn.Module):
 
         return x
 
-class TransformerEvaluationWrapper(torch.nn.Module):
+class ActionMLP(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        num_layers: int = 4,
+        hidden_size: int = 2048,
+        lang_features: int = 4096,
+        residual: bool = True,
+    ):
+        super().__init__()
+        assert num_layers >= 2, "Number of layers should be 2 or more"
+
+        self.in_features = in_features
+        self.out_features = out_features
+        self.residual = residual
+
+        # Project languages features to the same dimensions as perceptual features
+        self.lang_projection = nn.Linear(lang_features, in_features)
+
+        
+        # Create layers
+        layers = [nn.Linear(in_features * 2, hidden_size), nn.ReLU(inplace=True)] # in_features for s_0, in_features for lang
+        in_features = hidden_size
+        
+        for _ in range(num_layers - 2):
+            layers.append(nn.Linear(in_features, hidden_size)) 
+            layers.append(nn.ReLU(inplace=True))
+            in_features = hidden_size  # Set the input feature size for the next layer
+        layers.append(nn.Linear(hidden_size, out_features))
+
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, perceptual_emb: torch.Tensor, language_emb: torch.Tensor) -> torch.Tensor:
+        if len(perceptual_emb.shape) == 2:
+            perceptual_emb = perceptual_emb[:, None, :] # add dimension to make seq_len = 1
+            
+        
+        assert perceptual_emb.shape[1] == 1 # sequence dim should always be 1
+        
+        # Project language embedding to the same dimension as perceptual embedding
+        lang_emb_projected = self.lang_projection(language_emb)
+        
+        from einops import rearrange as rea 
+        perceptual_emb = rea(perceptual_emb, 'b s h -> b (s h)') # batch, sequence_length, hidden_dim
+
+        # Combine the embeddings
+        
+        # if self.residual and self.in_features == self.out_features:
+        #     x = perceptual_emb + lang_emb_projected
+        # else:
+        #     x = perceptual_emb * lang_emb_projected  # Or another type of combination
+        combined_emb = torch.cat([perceptual_emb, lang_emb_projected.mean(dim=1)], dim=-1)
+        x = self.layers[0](combined_emb)
+
+        # Pass through the layers
+        for layer in self.layers[1:]:
+            # If the layer is Linear and residual connections are enabled and shape is compatible
+            if isinstance(layer, nn.Linear) and self.residual and x.shape[-1] == layer.out_features:
+                identity = x
+                x = layer(x)
+                x = x + identity  # Apply skip connection
+            else:
+                x = layer(x)  # Apply the layer operation
+
+        return x
+    
+class AblationEvaluationWrapper(torch.nn.Module):
     def __init__(self, model, device='cpu') -> None:
         super().__init__()
         self.model = model
@@ -84,10 +151,21 @@ class TransformerEvaluationWrapper(torch.nn.Module):
 if __name__ == '__main__':
     bsz = 10
     inp_sz = 32
-    lang_embed =  torch.zeros((bsz, 69, 4096))
-    t = ActionTransformer(inp_sz, 32, decoder_hidden_size=4096, num_layers=8)
-    from torchinfo import  summary
+    lang_sz = 4096
+    lang_embed =  torch.zeros((bsz, 69, lang_sz))
+    print('Testing transformer...')
+    t = ActionTransformer(inp_sz, 32, decoder_hidden_size=lang_sz, lang_features=lang_sz, num_layers=8)
+    from torchinfo import summary
     summary(t)
     out = t.forward(torch.zeros((bsz, inp_sz)), language_emb=lang_embed)
     print(out.shape)
+    print('Passed!')
+    
+    print('Testing MLP...')
+    t = ActionMLP(inp_sz, 32, lang_features=lang_sz, num_layers=8)
+    from torchinfo import summary
+    summary(t)
+    out = t.forward(torch.zeros((bsz, inp_sz)), language_emb=lang_embed)
+    print(out.shape)
+    print('Passed!')
     
