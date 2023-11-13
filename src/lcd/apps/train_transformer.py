@@ -61,10 +61,9 @@ def main(
     args = AttriDict(
         {k: v for k, v in values.items() if k in args}
     )  #! is this function_locals only?
-    
     if not skip_eval:
         eval_state = AttriDict()
-        set_state(state=eval_state)
+        set_state(seed=seed, state=eval_state)
         eval_state.lang_embeddings = torch.load(DATA_PATH / "t5-v1_1-xxl_embeddings.pt")
     else:
         eval_state = None
@@ -82,7 +81,7 @@ def main(
         wandb.init(
             project="vanilla-diffuser",
             entity="lang-diffusion",
-            name=f"hulc-transformer-ablation",
+            name=f"hulc-transformer-ablation-single",
             config=vars(args),
         )
 
