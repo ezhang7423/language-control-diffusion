@@ -127,6 +127,8 @@ class CrossAttention(nn.Module):  # replace with regular cross attention
         self.query_dim = query_dim
 
         hidden_dim = dim_head * heads
+        
+        self.clip_projection = nn.Linear(1024, cross_attention_dim)
 
         self.norm = LayerNorm(query_dim)
         self.to_q = nn.Linear(query_dim, hidden_dim, bias=bias)
@@ -141,7 +143,7 @@ class CrossAttention(nn.Module):  # replace with regular cross attention
         x = self.norm(x)
         x = x.permute(0, 2, 1)
         q = self.to_q(x)
-        context = context if context is not None else x
+        context = self.clip_projection(context) if context is not None else x
         k = self.to_k(context)
         v = self.to_v(context)
 
