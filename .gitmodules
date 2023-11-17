@@ -1,7 +1,6 @@
 [submodule "submodules/hulc-baseline"]
 	path = submodules/hulc-baseline
 	url = git@github.com:ezhang7423/hulc-baseline.git
-[submodule "submodules/hulc-data"]
-	path = submodules/hulc-data
-	url = git@github.com:ezhang7423/hulc-data.git
-	ignore = dirty
+[submodule "talar"]
+	path = submodules/talar
+	url = https://huggingface.co/datasets/ezipe/talar
