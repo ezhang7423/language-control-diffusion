@@ -51,7 +51,7 @@ from pathlib import Path
 
 # * Feel free to change this path if your data is stored somewhere else
 # DATA_PATH = (abspath() / "../../submodules/hulc-data").resolve()
-DATA_PATH = (abspath() / "../../submodules/hulc-data").resolve()
+DATA_PATH = (abspath() / "../../submodules/data").resolve()
 HULC_PATH = (abspath() / "../../submodules/hulc-baseline").resolve()
 REPO_PATH = (abspath() / "../../").resolve()
 

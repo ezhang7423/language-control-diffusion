@@ -2,5 +2,8 @@
 	path = submodules/hulc-baseline
 	url = git@github.com:ezhang7423/hulc-baseline.git
 [submodule "talar"]
-	path = submodules/talar
+	path = submodules/data
 	url = https://huggingface.co/datasets/ezipe/talar
+[submodule "submodules/talar-openreview-fork"]
+	path = submodules/talar-openreview-fork
+	url = git@github.com:ezhang7423/talar-openreview-fork.git

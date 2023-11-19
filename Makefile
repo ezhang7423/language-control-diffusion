@@ -51,6 +51,10 @@ install:
 	# install hulc-baseline
 	cd ./submodules/hulc-baseline
 	. install.sh
+	
+	cd $${OG_DIR}
+	cd ./submodules/talar-openreview-fork
+	pip install -e .
 
 	# install poetry environment
 	cd $${OG_DIR}

@@ -54,6 +54,14 @@ pandas = "^1.5.3"
 wandb = "^0.14.0"
 cryptography = "^39.0.2"
 loguru = "^0.6.0"
+torchinfo = "^1.8.0"
+tensordict = "^0.2.1"
+dm-control = "1.0.10"
+mujoco = "2.3.2"
+mujoco-py = "2.1.2.14"
+zipp = "3.10.0"
+# pynvml
+# eztils
 
 [tool.poetry.scripts]
 # Entry points for the package https://python-poetry.org/docs/pyproject/#scripts
