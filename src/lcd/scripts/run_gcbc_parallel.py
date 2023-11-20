@@ -1,4 +1,4 @@
-from eztils.default.run_parallel import run_parallel, BaseHyperParameters
+from eztils.default.run_parallel import BaseHyperParameters, run_parallel
 
 
 class HyperParams(BaseHyperParameters):
@@ -10,8 +10,8 @@ class HyperParams(BaseHyperParameters):
 
 
 run_parallel(
-    HyperParams, 
-    base_cmd='lcd train_gcbc',
-    data_path='runs',
+    HyperParams,
+    base_cmd="lcd train_gcbc",
+    data_path="runs",
     sleep_time=10,
 )

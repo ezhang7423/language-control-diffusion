@@ -1,7 +1,4 @@
 # %%
-
-print('runnning')
-
 import datetime
 import inspect
 import sys
@@ -10,6 +7,7 @@ from pathlib import Path
 
 import torch
 import tqdm
+from eztils.torch.wandb import log_wandb_distribution
 from tensordict.tensordict import TensorDict as td
 from torch import nn
 from torchinfo import summary
@@ -21,7 +19,7 @@ from lcd.utils.config import AttriDict
 from lcd.utils.eval import evaluate_policy, print_and_save
 from lcd.utils.setup import set_seed
 from lcd.utils.training import cycle
-from eztils.torch.wandb import log_wandb_distribution
+from rich import print
 
 def get_best_cuda() -> int:
     import numpy as np
@@ -40,9 +38,6 @@ def get_best_cuda() -> int:
     return str(best_device_index.item())
 
 
-device = "cuda:" + get_best_cuda()
-
-
 def wlog(*args, **kwargs):
     if wandb.run is not None:
         wandb.log(*args, **kwargs)
@@ -53,24 +48,27 @@ def wlog(*args, **kwargs):
 @dataclass
 class EvalArgs:
     args: AttriDict = None
-    eval_state: AttriDict = None
     model: torch.nn.Module = None
     skip_eval: bool = False
+    env: object = None
+    use_dataset: bool = False
+    dataset: object = None
     num_sequences: int = 1000
 
 
 def main(
     seed: int = 12,
-    width: int = 64,
+    width: int = 256,
     upscaled_state_dim: int = 2048,
     upscale: bool = False,
-    depth: int = 3,
+    depth: int = 2,
     num_epochs: int = 100,
     num_steps: int = int(1e4),
     batch_size: int = 512,
     lr: float = 2e-4,
+    diffusion_dim: int = 16,
     use_wandb: bool = False,
-    skip_eval: bool = False,
+    skip_eval: bool = True,
     clevr: bool = True,
 ):
     set_seed(seed)
@@ -100,11 +98,9 @@ def main(
         upscaled_state_dim = 10
     # model
     final_dim = 40 if clevr else None
-    model = ForwardModel(in_dim=upscaled_state_dim * 2, final_dim=final_dim, num_units=[width] * depth)
-    # model = torch.load(
-    #     "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-17_22:33:28.679430/model_17.pt",
-    #     map_location="cpu",
-    # )
+    model = ForwardModel(
+        in_dim=upscaled_state_dim * 2, final_dim=final_dim, diffusion_dim=diffusion_dim, num_units=[width] * depth
+    )
     summary(model)
 
     # dataset
@@ -130,20 +126,15 @@ def main(
 
     train_dataloader = get_dataloader(train_dataset)
     val_dataloader = get_dataloader(val_dataset)
+    eval_arg = EvalArgs(args=args, model=model, skip_eval=skip_eval, env=setup_env() if not skip_eval else None)
 
-    # speed test
-    # for i in tqdm.tqdm(range(10000)): # around 120 it/s
-    #     batch = next(train_dataloader)
-
-    eval_arg = EvalArgs(args=args, eval_state=None, model=model, skip_eval=skip_eval)
-    eval_callback = setup_evaluation(eval_arg)
-
-    # validation evaluation is working
-    eval_callback.on_training_start(locals(), globals())  #!!
+    # test evaluation is working
+    evaluate(eval_arg)
 
     # train
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=1e-4)
+    device = "cuda:" + get_best_cuda()
     model.to(device)
     # %%
     # if True:
@@ -152,28 +143,30 @@ def main(
     from torch.nn import functional as F
 
     for epoch in range(num_epochs):
-    # for epoch in range(1):
+        # for epoch in range(1):
         print("*" * 50)
         print(f"{epoch=}")
         print("*" * 50)
         torch.save(model, exp_path / f"model_{epoch}.pt")
         torch.save(optimizer, exp_path / f"optimizer_{epoch}.pt")
         for i in tqdm.tqdm(range(num_steps)):
-        # for i in range(100):
-            def get_loss(dataloader, log_preds=False):
+            # for i in range(100):
+            def get_loss(dataloader, log_val=False):
                 # batch = preprocess_batch(next(dataloader), device)
+                extra_stats = {}
                 batch = next(dataloader).to(device).float()
                 pred = model.forward(
-                    torch.concat(
-                        (batch["obs"], batch["next_obs"]), dim=-1
-                    )
+                    torch.concat((batch["obs"], batch["next_obs"]), dim=-1)
                 ).to(device)
-                # loss = ((pred - batch['actions']) ** 2).mean()
-                loss = F.cross_entropy(pred, batch["actions"].to(torch.int64))
-                if log_preds:
-                    log_wandb_distribution('predictions', pred.reshape(-1))
+
+                act_int = batch["actions"].to(torch.int64)
+                loss = F.cross_entropy(pred, act_int)
+                if log_val:
+                    correct = pred.argmax(dim=1) == act_int
+                    extra_stats['eval/acc'] = sum(correct) / len(correct)
+                    log_wandb_distribution("predictions", pred.reshape(-1))
                 # print(loss)
-                return loss, {}
+                return loss, extra_stats
 
             loss, stats = get_loss(train_dataloader)
             loss.backward()
@@ -182,58 +175,55 @@ def main(
             if use_wandb:
                 wlog({"train/loss": loss, **stats})
             if not (i % 100):
-                val_loss, val_stats = get_loss(val_dataloader, log_preds=True)
+                val_loss, val_stats = get_loss(val_dataloader, log_val=True)
                 wlog({"eval/loss": val_loss, **val_stats})
 
         if not (epoch % 5):
             eval_arg.num_sequences = 10
-            eval_callback.on_step()
+            evaluate(eval_arg)
 
     eval_arg.num_sequences = 1000
-    eval_callback.on_step()
+    evaluate(eval_arg)
 
 
 # %%
 
 
-
 def load_dataset(
     clevr: bool,
-    upscaled_state_dim: int,
     exp_path: Path,
     val_ratio: float = 0.1,
     upscale: bool = False,
+    upscaled_state_dim=None,
     shuffle=False,
-):
-    
-    if not clevr:
-        # dict_keys(['actions', 'obs', 'rewards', 'dones', 'language_goal', 'obs_goal'])
-        data: dict = torch.load(DATA_PATH / "kitchen_buf.pt")
+    path=None,
+):  
+    if path:
+        data: dict = torch.load(path)
     else:
-        data: dict = torch.load(DATA_PATH / "ball_buf.pt")
-        
-    del data['language_goal']                
-    data = td(data, data['actions'].shape[0])
+        if not clevr:
+            # dict_keys(['actions', 'obs', 'rewards', 'dones', 'language_goal', 'obs_goal'])
+            data: dict = torch.load(DATA_PATH / "kitchen_buf.pt")
+        else:
+            data: dict = torch.load(DATA_PATH / "ball_buf.pt")
+
+    del data["language_goal"]
+    data = td(data, data["actions"].shape[0])
 
     # shift obs
-    data['next_obs'] = torch.cat((data['obs'][1:], data['obs'][-1:]), dim=0)
-    
-    # data["goals"] = data["goals"][:, None].repeat(1, 50, 1)
-    # data.batch_size = data["goals"].shape[:2]
-    random = torch.randn((upscaled_state_dim, 10)).expand(
-        data.shape[0], upscaled_state_dim, 10
-    )
-    torch.save(random, exp_path / "random_matrix_upscaler.pt")
+    data["next_obs"] = torch.cat((data["obs"][1:], data["obs"][-1:]), dim=0)
 
     if upscale:
+        random = torch.randn((upscaled_state_dim, 10)).expand(
+            data.shape[0], upscaled_state_dim, 10
+        )
+        torch.save(random, exp_path / "random_matrix_upscaler.pt")
         bmm = lambda obs: torch.bmm(random, obs.permute(0, 2, 1)).permute(0, 2, 1)
         data["obs"] = bmm(data["obs"])
         data["next_obs"] = bmm(data["next_obs"])
 
     # data['actions'] = torch.nn.functional.one_hot(data['actions'].squeeze().to(torch.int64), num_classes=72)
     data["actions"] = data["actions"].squeeze()
-
-    #! add transform on states to upscale to 4096 or something
 
     ## shuffle
     total_len = data.shape[0]
@@ -246,40 +236,20 @@ def load_dataset(
 
 # %%
 
-# if __name__ == "__main__":
 
-#     main(
-#         width=16384,
-#         depth=24,
-#         # batch_size=72,
-#         # skip_eval=True,
-#         # lr=2e-5,
-#         use_wandb=True
-#     )
-
-
-class Nop(object):
-    def nop(*args, **kw):
-        pass
-
-    def __getattr__(self, _):
-        return self.nop
-
-
-def setup_evaluation(eval_arg: EvalArgs = None):
-    return Nop()
+def setup_env():
+    # return Nop()
 
     sys.path.append(
-        "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/talar-openreview-fork/talar"
+        "/home/ubuntu/talar/talar-openreview/talar"
     )
     from envs.clevr_robot_env.env import LangGCPEnv
-    from stable_baselines3.common.callbacks import CallbackList, EvalCallback
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
     from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
     from stable_baselines3.common.vec_env.vec_normalize import VecNormalize
-
-    def make_env(mode):
+    
+    def make_env():
         def _thunk():
             env = LangGCPEnv(
                 maximum_episode_steps=50,
@@ -287,9 +257,12 @@ def setup_evaluation(eval_arg: EvalArgs = None):
                 obs_type="order_invariant",
                 direct_obs=True,
                 use_subset_instruction=True,
-                fail_dist=0.20,
-                language_model_type="bert_cont",
-                mode=mode,
+                fail_dist=0.2,
+                language_model_type="policy_ag",
+                # use_camera=True , # TODO debugging
+                
+                
+                mode="train",  # TODO put in test mode instead of train
             )
 
             env = Monitor(env, None, allow_early_resets=True)
@@ -298,8 +271,8 @@ def setup_evaluation(eval_arg: EvalArgs = None):
 
         return _thunk
 
-    def env_wrapper(mode, num):  #! extend to franka
-        envs = [make_env(mode) for _ in range(num)]
+    def env_wrapper(num):
+        envs = [make_env() for _ in range(num)]
 
         if len(envs) > 1:
             envs = SubprocVecEnv(envs)
@@ -310,185 +283,81 @@ def setup_evaluation(eval_arg: EvalArgs = None):
 
         return envs
 
-        train_env = env_wrapper("train", 2)
+    env =  env_wrapper(1)
+    env.reset()
+    return env
 
-    class EvaluationWrapper:
-        def __init__(self, model, env) -> None:
-            self.model = model
-            self.env = env
-            from stable_baselines3.common.vec_env import unwrap_vec_normalize
+def preprocess_obs(obs):
+    return torch.from_numpy(obs[:-3]).float().unsqueeze(0)
 
-            self._vec_normalize_env = unwrap_vec_normalize(env)
-
-        def get_env(self):
-            return self.env
-
-        def logger(self, *args, **kwargs):
-            pass
-
-        def predict(self, obs, state=None, mask=None, deterministic=False):
-            obs = torch.tensor(obs).to(device)
-            obs = obs.view(1, -1)
-            pred = self.model.forward(  #! fix this
-                obs[:, 32:], obs[:, :32].repeat_interleave(4, dim=0)
-            ).to(device)
-            return pred.cpu().detach().numpy()
-
-        def get_vec_normalize_env(self):
-            return self._vec_normalize_env
-
-        def save(self, path):
-            torch.save(self.model, path)
-
-    test_env = env_wrapper("test", 2)
-    error_env = env_wrapper("error", 2)
-
-    train_callback = EvalCallback(  #! do we really need three?
-        eval_env=train_env,
-        log_path=eval_arg.args.log_dir / "train_eval",
-        deterministic=False,
-        eval_freq=1,
-        n_eval_episodes=eval_arg.num_sequences,
-        name="train",
-    )
-    test_callback = EvalCallback(
-        eval_env=test_env,
-        log_path=eval_arg.args.log_dir / "test_eval",
-        deterministic=False,
-        eval_freq=1,
-        n_eval_episodes=eval_arg.num_sequences,
-        name="test",
-    )
-    error_callback = EvalCallback(
-        eval_env=error_env,
-        log_path=eval_arg.args.log_dir / "error_eval",
-        deterministic=False,
-        eval_freq=1,
-        n_eval_episodes=eval_arg.num_sequences,
-        name="error",
-    )
-
-    cb_list = [
-        train_callback,
-        test_callback,
-        error_callback,
-    ]
-
-    for cb in cb_list:
-        cb.init_callback(EvaluationWrapper(eval_arg.model, cb.eval_env))
-
-    return CallbackList(cb_list)
-    # run evaluation
-    eval_arg.model.eval()
+def evaluate(eval_arg: EvalArgs = None):
     if eval_arg.skip_eval:
+        print("Skipping evaluation")
         return
 
-    args = eval_arg.args.copy()
-    args.update(
-        {
-            "num_sequences": eval_arg.num_sequences,
-            "dm": TransformerEvaluationWrapper(eval_arg.model, device=device),
-            "ep_len": 360,
-            "subgoal_interval": 16,
-        }
+    from serialize_scene_struct import deserialize
+    success = []
+    rewards = []
+    
+    ds_idx = 0
+    ds = eval_arg.dataset
+    
+    p = next(eval_arg.model.parameters())
+    
+    for i in range(eval_arg.num_sequences):
+        struct = deserialize(ds['scene_struct'][ds_idx].numpy())
+        # obs = preprocess_obs(eval_arg.env.reset(scene_struct=struct))
+        obs = preprocess_obs(eval_arg.env.envs[0].unwrapped.reset(scene_struct=struct))
+        
+        for ts in range(10):
+            next_obs = ds['next_obs'][ds_idx:ds_idx+1]
+            model_input = torch.concat((obs, next_obs), dim=-1).to(p)
+            action = eval_arg.model(model_input).argmax()[None]
+            obs, rewards, dones, info = eval_arg.env.step(action)
+            obs = preprocess_obs(obs[0])
+            print('a_hat:', action)
+            print('a:', ds['actions'][ds_idx])
+            print('l1 error:', (obs - next_obs).abs().mean())
+            ds_idx += 1
+            if dones:
+                success.append(True)
+                break
+            success.append(False)
+    sr = sum(success) / len(success)
+    print("Success rate: ", sr)
+    return sr
+
+
+class Nop(object):
+    def nop(*args, **kw):
+        pass
+
+    def __getattr__(self, _):
+        return self.nop
+
+
+if __name__ == "__main__":
+    model = torch.load(
+        "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-19_18:42:51.252737/model_99.pt",
+        map_location="cpu",
+    )
+    dataset = load_dataset(clevr=True, upscale=False, exp_path=None, path = '/home/ubuntu/talar/talar-openreview/buf_2023-11-20---02-05.pt')
+
+    eval_arg = EvalArgs(
+        args={},
+        model=model,
+        skip_eval=False,
+        env=setup_env(),
+        use_dataset=True,
+        dataset=dataset[-1], # use validation set
     )
 
-    results, histories = evaluate_policy(eval_arg.eval_state, args)
-    model_id = f"transformer-ablation-{args}"
-
-    eval_results = print_and_save(results, args, histories, model_id)
-
-    wlog({f"eval/{k}": v for k, v in eval_results.items()})
-    eval_arg.model.train()
-
-
-# %%
-
-
-def preprocess_batch(batch, device):
-    batch = batch.flatten(end_dim=1).to(device)
-
-    # Find non-zero observation and next_observation entries
-    non_zero_obs = torch.any(batch["obs"] != 0, dim=-1)
-    non_zero_next_obs = torch.any(batch["next_obs"] != 0, dim=-1)
-
-    non_padded_flat_mask = non_zero_obs.flatten() & non_zero_next_obs.flatten()
-
-    return batch[non_padded_flat_mask]
-    # Provided the model operates on a single time step of obs,
-    # you can now index directly without reshaping:
-    non_padded_obs = batch["obs"][non_padded_flat_mask, :]
-    non_padded_next_obs = batch["next_obs"][non_padded_flat_mask, :]
-
-    # Combine both masks to find where both conditions are true
-    non_padded_mask = non_zero_obs & non_zero_next_obs
-
-    # Use the mask to filter out the padded values in each tensor field
-    filtered_batch = {
-        key: torch.masked_select(value, non_padded_mask.unsqueeze(-1))
-        for key, value in batch.items()
-    }
-
-    # Because masked_select flattens the output, we should recalculate the shape of non-padded entries
-    shape_size = non_padded_mask.sum()  # Total number of non-padded entries
-
-    # Now we need to reshape the tensors to the correct shape.
-    # This shape will depend on the field e.g., (shape_size x feature_size)
-    filtered_batch_reshaped = {
-        key: value.view(shape_size, -1) if value.numel() > 0 else value
-        for key, value in filtered_batch.items()
-    }
-
-
-# def preprocess_batch(batch, env, device, indices, sample_middle_state = True):
-#     import numpy as np
-#     from utils.kitchen_descriptions import LANGUAGE_DESCRIPTION, id2key
-#     from utils.ball_descriptions import template_list
-#     from utils.ball_descriptions import get_balls_description
-
-#     description_indices = np.array(indices)[:, 1]
-#     indices = np.array(indices)[:, 0]
-#     obs = torch.from_numpy(batch["obs"][indices]).to(device).float()
-#     next_obs = torch.from_numpy(batch["next_obs"][indices]).to(device).float()
-#     valids = torch.from_numpy(batch["valid"][indices])
-#     goals = batch["goals"][indices].astype(np.int16)
-
-#     batch_ids = np.arange(len(obs))
-#     traj_lengths = (valids.sum(1) - 1).reshape(-1).long()
-#     next_obs = next_obs[batch_ids, traj_lengths]
-
-#     sentences = []
-#     if sample_middle_state:
-#         if env == "kitchen":
-#             tmp_valids = valids
-#             tmp_obs = torch.zeros_like(next_obs)
-#             for i in range(len(obs)):
-#                 tmp_idx = tmp_valids[i].sum()
-#                 tmp_idx = np.random.choice(int(tmp_idx))
-#                 tmp_obs[i] = obs[i][tmp_idx]
-#                 descriptions = LANGUAGE_DESCRIPTION[id2key[goals[i].item()]][description_indices[i]]
-#                 sentences.append(descriptions)
-#             obs = tmp_obs
-#         elif env == "ball":
-#             tmp_valids = valids
-#             tmp_obs = torch.zeros_like(next_obs)
-#             for i in range(len(obs)):
-#                 tmp_idx = tmp_valids[i].sum()
-#                 tmp_idx = np.random.choice(int(tmp_idx))
-#                 tmp_obs[i] = obs[i][tmp_idx]
-#                 descriptions = get_balls_description(goals[i], obs[i][tmp_idx].cpu().numpy(), next_obs[i].cpu().numpy(), description_indices[i])
-#                 sentences.append(descriptions)
-#             obs = tmp_obs
-#         else:
-#             raise NotImplementedError
-#     return {
-#         "obs": obs, "next_obs": next_obs, "sentences": sentences
-#     }
-
-
-# Your model
-# model = ... (Define or load your model here)
-
-# Assuming your model takes obs as input and possibly other batch as well
-# Forward pass (make sure your model can handle the batch size, or split it into manageable batches if necessary)
-# output = model(filtered_batch_reshaped['obs'], ...)
+    evaluate(eval_arg)
+    # main(
+    #     width=16384,
+    #     depth=24,
+    #     # batch_size=72,
+    #     # skip_eval=True,
+    #     # lr=2e-5,
+    #     use_wandb=True
+    # )
