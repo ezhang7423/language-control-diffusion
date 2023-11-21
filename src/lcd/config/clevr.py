@@ -30,17 +30,17 @@ base = {
         "attention": True,  # False
         "renderer": "utils.MuJoCoRenderer",
         "downsample": False,  # True
-        "model_dim": 64,  # 128,
+        "model_dim": 32,  # 128,
         ## dataset
-        "loader": "datasets.HulcDataset",  # 'datasets.HulcDataset',
+        "loader": "datasets.ClevrDataset",  # 'datasets.HulcDataset',
         "frame_offset": 0,
         "normalizer": "GaussianNormalizer",
         "preprocess_fns": [],
         "clip_denoised": False,
         "use_padding": True,
         "max_path_length": 1000,
-        "observation_dim": 32,
-        "action_dim": 32,
+        "observation_dim": 16,
+        "action_dim": 16,
         ## serialization
         "logbase": logbase,
         "prefix": "diffusion/defaults",
@@ -69,5 +69,6 @@ base = {
         "device": "cuda",
         "seed": 0,
         "benchmark": None,
+        "llp_path": "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-20_06:41:04.604072/model_58.pt",
     }
 }

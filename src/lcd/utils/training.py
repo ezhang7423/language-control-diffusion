@@ -51,6 +51,7 @@ class Trainer:
         self,
         diffusion_model,
         dataset,
+        val_dataset=None,
         ema_decay=0.995,
         train_batch_size=32,
         train_lr=2e-5,
@@ -58,6 +59,7 @@ class Trainer:
         step_start_ema=2000,
         update_ema_every=10,
         log_freq=100,
+        validation_freq=100,
         sample_freq=1000,
         save_freq=1000,
         label_freq=100000,
@@ -71,7 +73,7 @@ class Trainer:
         self.ema = EMA(ema_decay)
         self.ema_model = copy.deepcopy(self.model)
         self.update_ema_every = update_ema_every
-
+        self.validation_freq = validation_freq
         self.step_start_ema = step_start_ema
         self.log_freq = log_freq
         self.sample_freq = sample_freq
@@ -87,11 +89,23 @@ class Trainer:
             torch.utils.data.DataLoader(
                 self.dataset,
                 batch_size=train_batch_size,
-                num_workers=1,
+                num_workers=0,
                 shuffle=True,
-                pin_memory=True,
+                # pin_memory=True,
             )
         )
+
+        if val_dataset is not None:
+            self.val_dataset = val_dataset
+            self.val_dataloader = cycle(
+                torch.utils.data.DataLoader(
+                    self.dataset,
+                    batch_size=train_batch_size,
+                    num_workers=0,
+                    shuffle=True,
+                    # pin_memory=True,
+                )
+            )
         self.dataloader_vis = cycle(
             torch.utils.data.DataLoader(
                 self.dataset, batch_size=1, num_workers=0, shuffle=True, pin_memory=True
@@ -137,6 +151,15 @@ class Trainer:
 
             self.optimizer.step()
             self.optimizer.zero_grad()
+
+            if self.val_dataset is not None and self.step % self.validation_freq == 0:
+                batch = next(self.val_dataloader)
+                batch = batch_to_device(batch)
+                if isinstance(batch, Batch):
+                    loss, infos = self.model.loss(*batch)
+                else:
+                    loss, infos = self.model.loss(*batch[0], **batch[1])
+                wlog({"val/loss": loss, **infos})
 
             if self.step % self.update_ema_every == 0:
                 self.step_ema()

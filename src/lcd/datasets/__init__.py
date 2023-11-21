@@ -1,1 +1,1 @@
-from .sequence import HulcDataset
+from .sequence import ClevrDataset, HulcDataset

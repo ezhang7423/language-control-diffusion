@@ -17,7 +17,7 @@ def main(
     if ctx.args:
         args = " ".join(ctx.args)
     else:
-        args = f" --seed 12 --wandb True"
+        args = f" --seed 12 --wandb True --benchmark clevr"
 
     cmd = f"{py} {REPO_PATH / 'src/lcd/scripts/diffuser.py'} {args}"
     logger.info(f"Running: \n{cmd}")

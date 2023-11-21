@@ -79,3 +79,53 @@ class HulcDataset(torch.utils.data.Dataset):
         return KwargsBatch(
             Batch(traj, lang), {"inpaint": {0: traj[0, self.action_dim :]}}
         )
+
+
+class ClevrDataset(torch.utils.data.Dataset):
+    "Characterizes a dataset for PyTorch"
+
+    def __init__(
+        self,
+        *args,
+        buf,
+        lang_embeds,
+        encoder_path,
+        frame_offset=0,
+        horizon=4,
+        clip_stride=16,
+        **kwargs,
+    ):
+        print(f"{buf=}")
+        self.clip_stride = clip_stride
+        self.frame_offset = frame_offset
+        self.horizon = horizon
+        self.buf = buf
+        self.lang_embeds = torch.load(lang_embeds)
+        encoder = torch.load(encoder_path)
+        encoder_type = next(encoder.parameters())
+
+        def encode(buf):
+            with torch.no_grad():
+                buf["obs"] = encoder.encode(buf["obs"].to(encoder_type))
+                buf["next_obs"] = encoder.encode(buf["next_obs"].to(encoder_type))
+
+        encode(self.buf)
+
+        self.observation_dim = kwargs.get("observation_dim")
+        self.action_dim = kwargs.get("action_dim")
+
+    def __len__(self):
+        return self.buf.shape[0]
+
+    def __getitem__(self, index):
+        lang = self.lang_embeds[str(self.buf["obs_goal"][index].int().tolist())]
+        traj = torch.concat(
+            (
+                self.buf["obs"][index : index + 1],
+                self.buf["next_obs"][index : index + 1],
+            ),
+            dim=1,
+        )
+        return KwargsBatch(
+            Batch(traj, lang), {"inpaint": {0: traj[0, self.action_dim :]}}
+        )

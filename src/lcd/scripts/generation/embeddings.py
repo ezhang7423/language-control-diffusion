@@ -3,6 +3,7 @@ from typing import List
 import json
 
 import torch
+import typer
 from einops import rearrange
 from transformers import T5EncoderModel, T5Tokenizer
 
@@ -99,10 +100,28 @@ def t5_encode_tokenized_text(
     return encoded_text
 
 
-NAME = "t5-v1_1-xxl"
-anns = sum(json.load(open("/data2/eddie/calvin/annotations.json")).values(), [])
-embeds = {}
-embeddings = t5_encode_text(anns, name=f"google/{NAME}")
-for a, e in zip(anns, embeddings):
-    embeds[a] = e.cpu()
-torch.save(embeds, f"{NAME}_embeddings.pt")
+def main(clevr: bool = True):
+    NAME = "t5-v1_1-xxl"
+    anns = sum(json.load(open("/data2/eddie/calvin/annotations.json")).values(), [])
+    embeds = {}
+
+    if clevr:
+        from .clevr_language import anns, tensor2lang
+
+    embeddings = t5_encode_text(anns, name=f"google/{NAME}")
+    for a, e in zip(anns, embeddings):
+        embeds[a] = e.cpu()
+
+    torch.save(embeds, f"{clevr=}_{NAME}_embeddings.pt")
+
+    if clevr:
+        final = {}
+        for k in tensor2lang:
+            final[k] = embeds[tensor2lang[k]]
+
+        torch.save(
+            final, f"clevr_{NAME}_direct_embeddings.pt"
+        )  # go directly from tensor to embedding
+
+
+typer.run(main)
