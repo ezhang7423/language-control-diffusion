@@ -20,9 +20,9 @@ def load_dataset(
     else:
         if not clevr:
             # dict_keys(['actions', 'obs', 'rewards', 'dones', 'language_goal', 'obs_goal'])
-            data: dict = torch.load(DATA_PATH / "kitchen_buf.pt")
+            data: dict = torch.load(DATA_PATH / "kitchen_buf.pt", map_location="cpu")
         else:
-            data: dict = torch.load(DATA_PATH / "ball_buf.pt")
+            data: dict = torch.load(DATA_PATH / "ball_buf.pt", map_location="cpu")
 
     del data["language_goal"]
     data = td(data, data["actions"].shape[0])

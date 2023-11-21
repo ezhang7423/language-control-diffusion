@@ -134,14 +134,13 @@ trainer_config = utils.Config(
     results_folder=args.savepath,
     bucket=args.bucket,
     n_reference=args.n_reference,
+    dev=args.device,
 )
 
 # -----------------------------------------------------------------------------#
 # -------------------------------- instantiate --------------------------------#
 # -----------------------------------------------------------------------------#
-
 model = model_config()
-
 diffusion = diffusion_config(model)
 
 if args.benchmark == "clevr":
@@ -157,7 +156,7 @@ else:
 utils.report_parameters(model)
 print("Testing forward...", end=" ", flush=True)
 dataloader = cycle(torch.utils.data.DataLoader(dataset, batch_size=1, num_workers=0))
-batch = batch_to_device(next(dataloader))
+batch = batch_to_device(next(dataloader), device=args.device)
 if isinstance(batch, Batch):
     loss, infos = diffusion.loss(*batch)
 else:
@@ -169,6 +168,13 @@ print("✓")
 # -----------------------------------------------------------------------------#
 # --------------------------------- main loop ---------------------------------#
 # -----------------------------------------------------------------------------#
+wandb.init(
+    project="vanilla-diffuser",
+    entity="lang-diffusion",
+    name=f"hulc-{args.wandb_name}",
+    config=vars(args),
+)
+
 
 n_epochs = int(args.n_train_steps // args.n_steps_per_epoch)
 
@@ -208,12 +214,6 @@ print(evaluation)
 print("✓")
 
 if args.wandb:
-    wandb.init(
-        project="vanilla-diffuser",
-        entity="lang-diffusion",
-        name=f"hulc-{args.wandb_name}",
-        config=vars(args),
-    )
     wandb.log(
         {
             "buffer_histogram": wandb.Histogram(

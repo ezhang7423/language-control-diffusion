@@ -100,8 +100,8 @@ class ClevrDataset(torch.utils.data.Dataset):
         self.frame_offset = frame_offset
         self.horizon = horizon
         self.buf = buf
-        self.lang_embeds = torch.load(lang_embeds)
-        encoder = torch.load(encoder_path)
+        self.lang_embeds = torch.load(lang_embeds, map_location="cpu")
+        encoder = torch.load(encoder_path, map_location="cpu")
         encoder_type = next(encoder.parameters())
 
         def encode(buf):

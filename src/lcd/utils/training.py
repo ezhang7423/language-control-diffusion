@@ -67,6 +67,7 @@ class Trainer:
         results_folder="./results",
         n_reference=8,
         bucket=None,
+        dev="cuda",
     ):
         super().__init__()
         self.model = diffusion_model
@@ -83,6 +84,7 @@ class Trainer:
 
         self.batch_size = train_batch_size
         self.gradient_accumulate_every = gradient_accumulate_every
+        self.dev = dev
 
         self.dataset = dataset
         self.dataloader = cycle(
@@ -138,7 +140,7 @@ class Trainer:
         for step in tqdm.tqdm(range(n_train_steps)):
             for i in range(self.gradient_accumulate_every):
                 batch = next(self.dataloader)
-                batch = batch_to_device(batch)
+                batch = batch_to_device(batch, device=self.dev)
 
                 if isinstance(batch, Batch):
                     loss, infos = self.model.loss(*batch)
@@ -154,7 +156,7 @@ class Trainer:
 
             if self.val_dataset is not None and self.step % self.validation_freq == 0:
                 batch = next(self.val_dataloader)
-                batch = batch_to_device(batch)
+                batch = batch_to_device(batch, self.dev)
                 if isinstance(batch, Batch):
                     loss, infos = self.model.loss(*batch)
                 else:
