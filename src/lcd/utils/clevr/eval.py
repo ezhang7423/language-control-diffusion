@@ -208,7 +208,12 @@ def evaluate(
     [p.wait() for p in processes]
     print("Processes finished")
 
-    results = [float(p.communicate()[1].decode().split("\n")[-1]) for p in processes]
+    try:
+        results = [float(p.communicate()[1].decode().split("\n")[-1]) for p in processes]
+    except:
+        print(processes[0].communicate()[0].decode('utf-8'))
+        print(processes[0].communicate()[1].decode('utf-8'))
+        raise Exception('Subprocesses failed')
     return sum(results) / len(results), num_processes * dry_eval_args.num_sequences
 
     # print(result)

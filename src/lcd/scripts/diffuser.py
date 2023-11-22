@@ -168,12 +168,13 @@ print("✓")
 # -----------------------------------------------------------------------------#
 # --------------------------------- main loop ---------------------------------#
 # -----------------------------------------------------------------------------#
-wandb.init(
-    project="vanilla-diffuser",
-    entity="lang-diffusion",
-    name=f"hulc-{args.wandb_name}",
-    config=vars(args),
-)
+if args.wandb:
+    wandb.init(
+        project="vanilla-diffuser",
+        entity="lang-diffusion",
+        name=f"hulc-{args.wandb_name}",
+        config=vars(args),
+    )
 
 
 n_epochs = int(args.n_train_steps // args.n_steps_per_epoch)
