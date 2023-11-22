@@ -1,3 +1,4 @@
+from lcd import DATA_PATH
 from lcd.utils import watch
 
 # ------------------------ base ------------------------#
@@ -70,6 +71,6 @@ base = {
         "seed": 0,
         "benchmark": None,
         "end2end": False,
-        "llp_path": "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-20_06:41:04.604072/model_58.pt",
+        "llp_path": str(DATA_PATH /  "models/mlp-llp/11-20-16-latent-dim/model_58.pt"),
     }
 }
