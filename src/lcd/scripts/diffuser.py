@@ -229,11 +229,11 @@ for i in range(n_epochs):
     trainer.train(n_train_steps=args.n_steps_per_epoch)
     if not (i % args.eval_freq):
         eval_model(
-            num_evals=args.n_evals_per_epoch,
+            num_evals=100,
             epoch=f"epoch_{i+1}",
         )
 
 eval_model(
-    num_evals=1000,
+    num_evals=100,
     epoch=f"epoch_{i+1}",
 )

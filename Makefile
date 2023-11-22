@@ -60,6 +60,7 @@ install:
 	cd $${OG_DIR}
 	poetry lock -n && poetry export --without-hashes > requirements.txt
 	poetry install -n
+	pip install jaxtyping pynvml eztils typer_config
 
 
 .PHONY: pre-commit-install

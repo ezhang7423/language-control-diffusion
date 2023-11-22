@@ -121,8 +121,8 @@ class ClevrDataset(torch.utils.data.Dataset):
         lang = self.lang_embeds[str(self.buf["obs_goal"][index].int().tolist())]
         traj = torch.concat(
             (
-                self.buf["obs"][index : index + 1],
                 self.buf["next_obs"][index : index + 1],
+                self.buf["obs"][index : index + 1],
             ),
             dim=1,
         )
