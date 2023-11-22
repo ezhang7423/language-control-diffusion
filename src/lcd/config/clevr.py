@@ -39,8 +39,8 @@ base = {
         "clip_denoised": False,
         "use_padding": True,
         "max_path_length": 1000,
-        "observation_dim": 16,
-        "action_dim": 16,
+        "observation_dim": 10,
+        "action_dim": 40,
         ## serialization
         "logbase": logbase,
         "prefix": "diffusion/defaults",

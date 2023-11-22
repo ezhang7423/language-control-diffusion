@@ -18,7 +18,7 @@ from typer_config.decorators import use_json_config
 from typer_config.loaders import loader_transformer
 from typer_config.utils import get_dict_section
 
-from lcd import DATA_PATH
+from lcd import DATA_PATH, REPO_PATH
 from lcd.models.mlp import ForwardModel
 from lcd.utils.clevr import load_dataset
 from lcd.utils.config import AttriDict
@@ -103,6 +103,7 @@ def eval_single_process(
     num_sequences: int = 4,
     max_episode_steps: int = 50,
     silent: bool = False,
+    only_hlp: bool = False,
 ):
     only_llp = dataset_path is not None
     print(
@@ -110,6 +111,8 @@ def eval_single_process(
     )
     if only_llp:
         model = torch.load(low_model_path, map_location="cpu")
+    elif only_hlp:
+        model = DiffuserWrapper(torch.load(high_model_path, map_location="cpu"))
     else:
         model = DiffusionEvaluationWrapper(
             torch.load(high_model_path, map_location="cpu"),
@@ -170,6 +173,7 @@ class DryEvalArgs:  # only basic types for calling in subprocess
     # env: object = None
     num_sequences: int = 4
     max_episode_steps: int = 50
+    only_hlp: bool = False
     silent: bool = True
 
 
@@ -239,6 +243,23 @@ class LLPEvaluationWrapper(nn.Module):
         return self.low(obs.to(self.p), next_obs.to(self.p))
 
 
+class DiffuserWrapper(nn.Module):
+    def __init__(self, high) -> None:
+        super().__init__()
+        self.high = high
+        self.p = next(high.parameters())
+
+    def forward(self, obs, _):
+        obs, lang = preprocess_obs(obs, return_goal=True)
+
+        # print(obs.shape, lang.shape)
+        action_state = self.high.conditional_sample(
+            lang.to(self.p)[None], horizon=1, inpaint={0: obs}
+        ).trajectories
+        return action_state[:, :, :40].squeeze(dim=1)
+
+
+
 class DiffusionEvaluationWrapper(nn.Module):
     def __init__(self, high, low) -> None:
         super().__init__()
@@ -261,8 +282,7 @@ class DiffusionEvaluationWrapper(nn.Module):
 
 def setup_env(max_episode_steps):
     # return Nop()
-
-    sys.path.append("/home/ubuntu/talar/talar-openreview/talar")
+    sys.path.append(str(REPO_PATH / "submodules/talar-openreview-fork/talar"))
     from envs.clevr_robot_env.env import LangGCPEnv
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
