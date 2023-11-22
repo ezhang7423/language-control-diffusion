@@ -69,6 +69,7 @@ base = {
         "device": "cuda",
         "seed": 0,
         "benchmark": None,
+        "end2end": False,
         "llp_path": "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-20_06:41:04.604072/model_58.pt",
     }
 }

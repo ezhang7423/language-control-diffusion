@@ -293,6 +293,23 @@ class DiffuserWrapper(nn.Module):
 
 
 
+class DiffuserWrapper(nn.Module):
+    def __init__(self, high) -> None:
+        super().__init__()
+        self.high = high
+        self.p = next(high.parameters())
+
+    def forward(self, obs, _):
+        obs, lang = preprocess_obs(obs, return_goal=True)
+
+        # print(obs.shape, lang.shape)
+        action_state = self.high.conditional_sample(
+            lang.to(self.p)[None], horizon=1, inpaint={0: obs}
+        ).trajectories
+        return action_state[:, :, :40].squeeze(dim=1)
+
+
+
 class DiffusionEvaluationWrapper(nn.Module):
     def __init__(self, high, low) -> None:
         super().__init__()
