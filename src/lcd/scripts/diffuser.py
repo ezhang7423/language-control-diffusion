@@ -202,7 +202,7 @@ def eval_model(num_evals, epoch=0):
                 high_model_path=os.path.join(args.savepath, f"model_{epoch}.pt"),
                 num_sequences=num_sequences,
                 only_hlp=True if args.end2end else False,
-                only_hlp_transformer=False,
+                transformer=False,
             ),
             num_processes=num_processes,
         )

@@ -112,7 +112,7 @@ def main(
     ret = evaluate(
         DryEvalArgs(
             high_model_path=str(exp_path / f"model_initial.pt"),
-            only_hlp_transformer=True,
+            transformer=True,
         ),
         eval_all=True,
         skip_eval=False,
@@ -145,7 +145,7 @@ def main(
             evaluate(
                 DryEvalArgs(
                     high_model_path=str(model_path),
-                    only_hlp_transformer=True,
+                    transformer=True,
                     num_sequences=100,
                 ),
                 skip_eval=False,

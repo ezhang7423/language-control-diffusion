@@ -103,17 +103,18 @@ def eval_single_process(
     max_episode_steps: int = 50,
     silent: bool = False,
     only_hlp: bool = False,
-    only_hlp_transformer: bool = True,
+    transformer: bool = True,
     mode: str = 'train',
 ):
     only_llp = dataset_path is not None
     print(
-        f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {only_hlp_transformer=}" 
+        f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {transformer=}" 
     )
     
-    if only_hlp_transformer:
+    if transformer and only_hlp:
         model = TransformerWrapper(torch.load(high_model_path, map_location="cpu"))
-    elif only_llp:
+    elif transformer: 
+        raise NotImplementedError('todo')
         model = torch.load(low_model_path, map_location="cpu")
     elif only_hlp:
         model = DiffuserWrapper(torch.load(high_model_path, map_location="cpu"))
@@ -176,9 +177,9 @@ class DryEvalArgs:  # only basic types for calling in subprocess
     # env: object = None
     num_sequences: int = 4
     max_episode_steps: int = 50
-    only_hlp: bool = False
+    only_hlp: bool = False # end2end model
     silent: bool = True
-    only_hlp_transformer: bool = True
+    transformer: bool = True
 
 
 def evaluate(
