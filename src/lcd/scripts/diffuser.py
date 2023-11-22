@@ -196,7 +196,8 @@ def eval_model(num_evals, epoch=0):
                 low_model_path=args.llp_path,
                 high_model_path=os.path.join(args.savepath, f"model_{epoch}.pt"),
                 num_sequences=num_sequences,
-                only_hlp=True
+                only_hlp=True,
+                only_hlp_transformer=False,
             ),
             num_processes=num_processes,
         )
@@ -210,7 +211,8 @@ def eval_model(num_evals, epoch=0):
 
 
 print("Testing evaluation...", end=" ", flush=True)
-evaluation = eval_model(num_evals=100, epoch="epoch_0")
+evaluation = eval_model(num_evals=1, epoch="epoch_0") # just use single process
+evaluation = eval_model(num_evals=100, epoch="epoch_0") # multi subprocess
 print(evaluation)
 print("✓")
 

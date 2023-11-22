@@ -27,7 +27,6 @@ app = typer.Typer(add_completion=False, pretty_exceptions_show_locals=False)
 
 embeds = torch.load(DATA_PATH / "clevr_direct_embeddings.pt")
 
-
 @dataclass
 class EvalArgs:
     model: torch.nn.Module = None
@@ -104,12 +103,17 @@ def eval_single_process(
     max_episode_steps: int = 50,
     silent: bool = False,
     only_hlp: bool = False,
+    only_hlp_transformer: bool = True,
+    mode: str = 'train',
 ):
     only_llp = dataset_path is not None
     print(
-        f"{low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=}"
+        f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {only_hlp_transformer=}" 
     )
-    if only_llp:
+    
+    if only_hlp_transformer:
+        model = TransformerWrapper(torch.load(high_model_path, map_location="cpu"))
+    elif only_llp:
         model = torch.load(low_model_path, map_location="cpu")
     elif only_hlp:
         model = DiffuserWrapper(torch.load(high_model_path, map_location="cpu"))
@@ -124,7 +128,7 @@ def eval_single_process(
 
     eval_arg = EvalArgs(
         model=model,
-        # env=env,
+        env=setup_env(mode, max_episode_steps),
         only_llp=only_llp,
         dataset=load_dataset(
             clevr=True, upscale=False, exp_path=None, path=dataset_path
@@ -135,7 +139,6 @@ def eval_single_process(
         max_episode_steps=max_episode_steps,
         silent=silent,
     )
-    eval_arg.env = setup_env(eval_arg.max_episode_steps)
 
     success = []
     ds_idx = 0
@@ -175,45 +178,62 @@ class DryEvalArgs:  # only basic types for calling in subprocess
     max_episode_steps: int = 50
     only_hlp: bool = False
     silent: bool = True
+    only_hlp_transformer: bool = True
 
 
 def evaluate(
     dry_eval_args: DryEvalArgs,
     skip_eval: bool = False,
+    eval_all: bool = False,
     num_processes: int = 25,
 ):
     if skip_eval:
         print("Skipping evaluation")
-        return
+        return {}
 
-    # if num_processes > 1:
-    processes = []
-    for _ in range(num_processes):
-        processes.append(
-            subprocess.Popen(
-                [
-                    sys.executable,
-                    os.path.abspath(__file__),
-                    "--config",
-                    json.dumps(vars(dry_eval_args)),  # Convert the args to JSON string
-                ],
-                stdout=subprocess.PIPE,  # Capture standard output
-                stderr=subprocess.PIPE,  # Capture standard error
-                # shell=True,
-            )
-        )
-        time.sleep(0.2)
+    def eval_helper(mode='train'):
+        args = vars(dry_eval_args)
+        args['mode'] = mode
+        if num_processes > 1:
+            processes = []
+            for _ in range(num_processes):
+                processes.append(
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            os.path.abspath(__file__),
+                            "--config",
+                            json.dumps(args),  # Convert the args to JSON string
+                        ],
+                        stdout=subprocess.PIPE,  # Capture standard output
+                        stderr=subprocess.PIPE,  # Capture standard error
+                    )
+                )
+                time.sleep(0.2)
 
-    print("Waiting for subprocesses to finish...")
-    [p.wait() for p in processes]
-    print("Processes finished")
+            print("Waiting for subprocesses to finish...")
+            [p.wait() for p in processes]
+            print("Processes finished")
 
-    results = [float(p.communicate()[1].decode().split("\n")[-1]) for p in processes]
-    return sum(results) / len(results), num_processes * dry_eval_args.num_sequences
-
-    # print(result)
-    # else:
-    #     eval_single_process(**vars(dry_eval_args))
+            try:
+                results = [float(p.communicate()[1].decode().split("\n")[-1]) for p in processes]
+            except:
+                print(processes[0].communicate()[0].decode('utf-8'))
+                print(processes[0].communicate()[1].decode('utf-8'))
+                raise Exception('Subprocesses failed')
+            sr, total_evals = sum(results) / len(results), num_processes * dry_eval_args.num_sequences
+        else:
+            sr, total_evals = eval_single_process(**args), 1
+        return {f'eval/{mode}-sr': sr, f'eval/{mode}-total_evals': total_evals}
+    
+    if eval_all:
+        return  {
+            **eval_helper(mode='train'),
+            **eval_helper(mode='test'),
+            **eval_helper(mode='error')
+        }
+    else:
+        return eval_helper()
 
 
 # def evaluate_llp(eval_arg: EvalArgs = None):
@@ -241,6 +261,19 @@ class LLPEvaluationWrapper(nn.Module):
         obs = preprocess_obs(obs)
         next_obs = preprocess_obs(next_obs)
         return self.low(obs.to(self.p), next_obs.to(self.p))
+
+class TransformerWrapper(torch.nn.Module):
+    def __init__(self, model, device='cpu') -> None:
+        super().__init__()
+        self.model = model
+        
+    
+    def forward(self, obs, _):
+        obs, lang = preprocess_obs(obs, return_goal=True)
+        d = next(self.model.parameters())
+        
+        ret =  self.model(obs.to(d)[None], lang.to(d)[None])
+        return ret
 
 
 class DiffuserWrapper(nn.Module):
@@ -280,7 +313,7 @@ class DiffusionEvaluationWrapper(nn.Module):
         return self.low.final_layers(model_input)
 
 
-def setup_env(max_episode_steps):
+def setup_env(mode, max_episode_steps):
     # return Nop()
     sys.path.append(str(REPO_PATH / "submodules/talar-openreview-fork/talar"))
     from envs.clevr_robot_env.env import LangGCPEnv
@@ -300,7 +333,7 @@ def setup_env(max_episode_steps):
                 fail_dist=0.2,
                 language_model_type="policy_ag",
                 # use_camera=True , # TODO debugging
-                mode="train",  # TODO put in test mode instead of train
+                mode=mode,
             )
 
             env = Monitor(env, None, allow_early_resets=True)
@@ -324,7 +357,6 @@ def setup_env(max_episode_steps):
     env = env_wrapper(1)
     env.reset()
     return env
-
 
 if __name__ == "__main__":
     # typer.run(eval_single_process)
