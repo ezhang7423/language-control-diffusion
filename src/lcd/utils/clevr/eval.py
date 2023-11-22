@@ -224,7 +224,7 @@ def evaluate(
                 raise Exception('Subprocesses failed')
             sr, total_evals = sum(results) / len(results), num_processes * dry_eval_args.num_sequences
         else:
-            sr, total_evals = eval_single_process(**args), 1
+            sr, total_evals = eval_single_process(**args), dry_eval_args.num_sequences
         return {f'eval/{mode}-sr': sr, f'eval/{mode}-total_evals': total_evals}
     
     if eval_all:

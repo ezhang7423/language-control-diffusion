@@ -196,7 +196,7 @@ def eval_model(num_evals, epoch=0):
             num_processes = 25
             num_sequences = num_evals // num_processes
 
-        avg, num_evals = evaluate(
+        ret = evaluate(
             dry_eval_args=DryEvalArgs(
                 low_model_path=args.llp_path,
                 high_model_path=os.path.join(args.savepath, f"model_{epoch}.pt"),
@@ -207,7 +207,7 @@ def eval_model(num_evals, epoch=0):
             num_processes=num_processes,
         )
         if args.wandb:
-            wandb.log({"eval/sr": avg, "eval/num_evals": num_evals})
+            wandb.log(ret)
     else:
         rollout.main(seed=args.seed, num_sequences=num_evals)
         dm_args = args.as_dict()
