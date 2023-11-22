@@ -41,6 +41,11 @@ set_seed(args.seed)
 # -----------------------------------------------------------------------------#
 # ---------------------------------- dataset ----------------------------------#
 # -----------------------------------------------------------------------------#
+if args.end2end:
+    args.loader = "datasets.ClevrEnd2EndDataset"
+    args.observation_dim = 10
+    args.action_dim = 40
+
 if args.benchmark == "clevr":
     print("loading dataset...")
     train, val = load_dataset(True, exp_path=None)
@@ -57,7 +62,6 @@ if args.benchmark == "clevr":
         frame_offset=args.frame_offset,
         encoder_path=args.llp_path,
         lang_embeds=DATA_PATH / "clevr_direct_embeddings.pt",
-        # buf=DATA_PATH / f"ball_buf.pt",
         observation_dim=args.observation_dim,
         action_dim=args.action_dim,
     )
@@ -168,12 +172,13 @@ print("✓")
 # -----------------------------------------------------------------------------#
 # --------------------------------- main loop ---------------------------------#
 # -----------------------------------------------------------------------------#
-wandb.init(
-    project="vanilla-diffuser",
-    entity="lang-diffusion",
-    name=f"hulc-{args.wandb_name}",
-    config=vars(args),
-)
+if args.wandb:
+    wandb.init(
+        project="vanilla-diffuser",
+        entity="lang-diffusion",
+        name=f"hulc-{args.wandb_name}",
+        config=vars(args),
+    )
 
 
 n_epochs = int(args.n_train_steps // args.n_steps_per_epoch)
@@ -196,6 +201,7 @@ def eval_model(num_evals, epoch=0):
                 low_model_path=args.llp_path,
                 high_model_path=os.path.join(args.savepath, f"model_{epoch}.pt"),
                 num_sequences=num_sequences,
+                only_hlp=True if args.end2end else False,
             ),
             num_processes=num_processes,
         )

@@ -61,7 +61,8 @@ install:
 	poetry lock -n && poetry export --without-hashes > requirements.txt
 	poetry install -n
 	pip install jaxtyping pynvml eztils typer_config
-
+	pip uninstall torch torhcvision torchaudio
+	pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
 
 .PHONY: pre-commit-install
 pre-commit-install:
