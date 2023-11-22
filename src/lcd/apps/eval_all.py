@@ -1,46 +1,45 @@
+import io
 import json
 import os
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import typer
-from lcd.utils.clevr.eval import DryEvalArgs, evaluate
-from lcd import DATA_PATH
-from rich import print
 from eztils import datestr
 from eztils.torch import seed_everything
-import io
 from IPython.display import display
+from rich import print
+
+from lcd import DATA_PATH
+from lcd.utils.clevr.eval import DryEvalArgs, evaluate
 
 MODEL_PATH = DATA_PATH / "models"
 
 
-def eval_over_seeds(path: Path, path_key: str, model_file: str,  args: DryEvalArgs, **kwargs):
+def eval_over_seeds(
+    path: Path, path_key: str, model_file: str, args: DryEvalArgs, **kwargs
+):
     results = []
-    modes = ['train', 'test', 'error']
+    modes = ["train", "test", "error"]
     for seed in path.iterdir():
-        print('Evaluating:', seed.name)
-        
+        print("Evaluating:", seed.name)
+
         setattr(args, path_key, str(seed / model_file))
-        res = evaluate(
-            dry_eval_args=args,            
-            eval_all=True,
-            **kwargs
-        )
-        results.append([res[f'eval/{mode}-sr'] for mode in modes])
-        
+        res = evaluate(dry_eval_args=args, eval_all=True, **kwargs)
+        results.append([res[f"eval/{mode}-sr"] for mode in modes])
+
     raw_results = np.array(results).T
     return raw_results.mean(axis=1), raw_results.std(axis=1), raw_results
 
 
-
-    
 def fmt(mean, std):
     # round the numbers to 2 decimals
     # return f'{mean[0]} ± {std[0]}'
     mean *= 100
     std *= 100
-    return f'{mean:.1f}% ± {std:.1f}'
+    return f"{mean:.1f}% ± {std:.1f}"
+
 
 def main(
     transformer: bool = False,
@@ -49,61 +48,60 @@ def main(
     hierarchical: bool = True,
 ):
     seed_everything(0)
-    df = pd.DataFrame(
-        columns=['model', 'train', 'test', 'error']
-    )
+    df = pd.DataFrame(columns=["model", "train", "test", "error"])
     raw = {}
+
     def add_to_df(model, mean, std, results):
-        new_df = df.append({
-            'model': model,
-            'train': fmt(mean[0], std[0]),
-            'test':  fmt(mean[1], std[1]),
-            'error': fmt(mean[2], std[2])
-        }, ignore_index=True)
-        
-        raw[model] = results.tolist()    
+        new_df = df.append(
+            {
+                "model": model,
+                "train": fmt(mean[0], std[0]),
+                "test": fmt(mean[1], std[1]),
+                "error": fmt(mean[2], std[2]),
+            },
+            ignore_index=True,
+        )
+
+        raw[model] = results.tolist()
         return new_df
-        
+
     ###################
     # e2e transformer
     ###################
-    
-    if transformer:
-        print('Evaluating transformer...')
-        
-        path = MODEL_PATH / "transformer"
-        args = DryEvalArgs(
-            transformer=True,
-            only_hlp=True,
-            num_sequences=100
-        )
-        mean, std, results = eval_over_seeds(path, 'high_model_path', 'model_9.pt', args, num_processes=1)
-        new_df = add_to_df('transformer', mean, std, results)
 
+    if transformer:
+        print("Evaluating transformer...")
+
+        path = MODEL_PATH / "transformer"
+        args = DryEvalArgs(transformer=True, only_hlp=True, num_sequences=100)
+        mean, std, results = eval_over_seeds(
+            path, "high_model_path", "model_9.pt", args, num_processes=1
+        )
+        df = add_to_df("transformer", mean, std, results)
 
     ###################
     # diffuser
     ###################
-    
+
     if diffuser:
-        print('Evaluating diffuser...')
-        
+        print("Evaluating diffuser...")
+
         path = MODEL_PATH / "diffuser"
         args = DryEvalArgs(
-                num_sequences=2, 
-                only_hlp=True,
-                transformer=False,
+            num_sequences=2,
+            only_hlp=True,
+            transformer=False,
         )
 
         mean, std, results = eval_over_seeds(
-            path, 
-            'high_model_path',
-            model_file='model_100000.pt',
+            path,
+            "high_model_path",
+            model_file="model_100000.pt",
             args=args,
             num_processes=50,
-        )            
-        
-        new_df = add_to_df('diffuser', mean, std, results)
+        )
+
+        df = add_to_df("diffuser", mean, std, results)
 
     ###################
     # lcd
@@ -112,28 +110,29 @@ def main(
     ###################
     # hierarchical transformer
     ###################
-    
+
     ###################
     # save results
-    ###################    
-    
+    ###################
+
     with io.StringIO() as buffer:
-        df.to_csv(buffer, sep=' ', index=False)
+        df.to_csv(buffer, sep=" ", index=False)
         print(buffer.getvalue())
 
-    print('Copying to clipboard')
+    print("Copying to clipboard")
     df.to_clipboard()
-    
+
     # save the dataframe
-    print('Saving to csv: ', os.getcwd() + f'/results_{datestr()}.csv')
-    df.to_csv(f'results_{datestr()}.csv')
-    
+    print("Saving to csv: ", os.getcwd() + f"/results_{datestr()}.csv")
+    df.to_csv(f"results_{datestr()}.csv")
+
     # save the raw results
-    print('Saving raw results to json: ', os.getcwd() + f'/raw_results_{datestr()}.json')
-    with open(f'raw_results_{datestr()}.json', 'w') as f:
+    print(
+        "Saving raw results to json: ", os.getcwd() + f"/raw_results_{datestr()}.json"
+    )
+    with open(f"raw_results_{datestr()}.json", "w") as f:
         json.dump(raw, f)
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     typer.run(main)

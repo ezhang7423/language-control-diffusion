@@ -20,12 +20,14 @@ from typer_config.utils import get_dict_section
 
 from lcd import DATA_PATH, REPO_PATH
 from lcd.models.mlp import ForwardModel
+from lcd.models.transformer import ActionTransformer
 from lcd.utils.clevr import load_dataset
 from lcd.utils.config import AttriDict
 
 app = typer.Typer(add_completion=False, pretty_exceptions_show_locals=False)
 
 embeds = torch.load(DATA_PATH / "clevr_direct_embeddings.pt")
+
 
 @dataclass
 class EvalArgs:
@@ -95,7 +97,7 @@ def use_json_config(
 @app.command()
 @use_json_config()
 def eval_single_process(
-    low_model_path: str = "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-20_06:41:04.604072/model_30.pt",
+    low_model_path: str = str(DATA_PATH / "models" / "mlp-llp" / "model.pt"),
     high_model_path: str = "/home/ubuntu/talar/lcd-iclr24-clevr/logs/diffusion/defaults_T20_S12/11-20_07:10:20/model_290000.pt",
     dataset_path: str = None,
     # env: object = None,
@@ -104,18 +106,20 @@ def eval_single_process(
     silent: bool = False,
     only_hlp: bool = False,
     transformer: bool = True,
-    mode: str = 'train',
+    mode: str = "train",
 ):
     only_llp = dataset_path is not None
     print(
-        f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {transformer=}" 
+        f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {transformer=}"
     )
-    
+
     if transformer and only_hlp:
         model = TransformerWrapper(torch.load(high_model_path, map_location="cpu"))
-    elif transformer: 
-        raise NotImplementedError('todo')
-        model = torch.load(low_model_path, map_location="cpu")
+    elif transformer:
+        model = TransformerHierarchicalWrapper(
+            torch.load(high_model_path, map_location="cpu"),
+            torch.load(low_model_path, map_location="cpu"),
+        )
     elif only_hlp:
         model = DiffuserWrapper(torch.load(high_model_path, map_location="cpu"))
     else:
@@ -171,13 +175,13 @@ def eval_single_process(
 
 @dataclass
 class DryEvalArgs:  # only basic types for calling in subprocess
-    low_model_path: str = "/home/ubuntu/talar/lcd-iclr24-clevr/submodules/data/clevr/11-20_06:41:04.604072/model_30.pt"
+    low_model_path: str = str(DATA_PATH / "models" / "mlp-llp" / "model.pt")
     high_model_path: str = "/home/ubuntu/talar/lcd-iclr24-clevr/logs/diffusion/defaults_T20_S12/11-20_07:10:20/model_290000.pt"
     dataset_path: str = None
     # env: object = None
     num_sequences: int = 4
     max_episode_steps: int = 50
-    only_hlp: bool = False # end2end model
+    only_hlp: bool = False  # end2end model
     silent: bool = True
     transformer: bool = True
 
@@ -192,9 +196,9 @@ def evaluate(
         print("Skipping evaluation")
         return {}
 
-    def eval_helper(mode='train'):
+    def eval_helper(mode="train"):
         args = vars(dry_eval_args)
-        args['mode'] = mode
+        args["mode"] = mode
         if num_processes > 1:
             processes = []
             for _ in range(num_processes):
@@ -217,21 +221,27 @@ def evaluate(
             print("Processes finished")
 
             try:
-                results = [float(p.communicate()[1].decode().split("\n")[-1]) for p in processes]
+                results = [
+                    float(p.communicate()[1].decode().split("\n")[-1])
+                    for p in processes
+                ]
             except:
-                print(processes[0].communicate()[0].decode('utf-8'))
-                print(processes[0].communicate()[1].decode('utf-8'))
-                raise Exception('Subprocesses failed')
-            sr, total_evals = sum(results) / len(results), num_processes * dry_eval_args.num_sequences
+                print(processes[0].communicate()[0].decode("utf-8"))
+                print(processes[0].communicate()[1].decode("utf-8"))
+                raise Exception("Subprocesses failed")
+            sr, total_evals = (
+                sum(results) / len(results),
+                num_processes * dry_eval_args.num_sequences,
+            )
         else:
             sr, total_evals = eval_single_process(**args), dry_eval_args.num_sequences
-        return {f'eval/{mode}-sr': sr, f'eval/{mode}-total_evals': total_evals}
-    
+        return {f"eval/{mode}-sr": sr, f"eval/{mode}-total_evals": total_evals}
+
     if eval_all:
-        return  {
-            **eval_helper(mode='train'),
-            **eval_helper(mode='test'),
-            **eval_helper(mode='error')
+        return {
+            **eval_helper(mode="train"),
+            **eval_helper(mode="test"),
+            **eval_helper(mode="error"),
         }
     else:
         return eval_helper()
@@ -263,17 +273,17 @@ class LLPEvaluationWrapper(nn.Module):
         next_obs = preprocess_obs(next_obs)
         return self.low(obs.to(self.p), next_obs.to(self.p))
 
+
 class TransformerWrapper(torch.nn.Module):
-    def __init__(self, model, device='cpu') -> None:
+    def __init__(self, model, device="cpu") -> None:
         super().__init__()
-        self.model = model
-        
-    
+        self.model: ActionTransformer = model
+
     def forward(self, obs, _):
         obs, lang = preprocess_obs(obs, return_goal=True)
         d = next(self.model.parameters())
-        
-        ret =  self.model(obs.to(d)[None], lang.to(d)[None])
+
+        ret = self.model(obs.to(d)[None], lang.to(d)[None])
         return ret
 
 
@@ -293,22 +303,21 @@ class DiffuserWrapper(nn.Module):
         return action_state[:, :, :40].squeeze(dim=1)
 
 
-
-class DiffuserWrapper(nn.Module):
-    def __init__(self, high) -> None:
+class TransformerHierarchicalWrapper(torch.nn.Module):
+    def __init__(self, high, low) -> None:
         super().__init__()
-        self.high = high
-        self.p = next(high.parameters())
+        self.high: ActionTransformer = high
+        self.low: ForwardModel = low
 
     def forward(self, obs, _):
         obs, lang = preprocess_obs(obs, return_goal=True)
+        d = next(self.high.parameters())
 
-        # print(obs.shape, lang.shape)
-        action_state = self.high.conditional_sample(
-            lang.to(self.p)[None], horizon=1, inpaint={0: obs}
-        ).trajectories
-        return action_state[:, :, :40].squeeze(dim=1)
-
+        encoded_obs = self.low.encode(obs.to(d))
+        goal = self.high(encoded_obs, lang.to(d)[None])
+        # TODO squeeze
+        low_input = torch.concat((encoded_obs, goal), dim=-1).to(d)
+        return self.low.final_layers(low_input)
 
 
 class DiffusionEvaluationWrapper(nn.Module):
@@ -375,6 +384,7 @@ def setup_env(mode, max_episode_steps):
     env = env_wrapper(1)
     env.reset()
     return env
+
 
 if __name__ == "__main__":
     # typer.run(eval_single_process)

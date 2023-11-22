@@ -216,8 +216,8 @@ def eval_model(num_evals, epoch=0):
 
 
 print("Testing evaluation...", end=" ", flush=True)
-evaluation = eval_model(num_evals=1, epoch="epoch_0") # just use single process
-evaluation = eval_model(num_evals=100, epoch="epoch_0") # multi subprocess
+evaluation = eval_model(num_evals=1, epoch="epoch_0")  # just use single process
+evaluation = eval_model(num_evals=100, epoch="epoch_0")  # multi subprocess
 print(evaluation)
 print("✓")
 

@@ -134,15 +134,15 @@ class ClevrDataset(torch.utils.data.Dataset):
         self.horizon = horizon
         self.buf = buf
         self.lang_embeds = torch.load(lang_embeds, map_location="cpu")
-        # encoder = torch.load(encoder_path, map_location="cpu")
-        # encoder_type = next(encoder.parameters())
+        encoder = torch.load(encoder_path, map_location="cpu")
+        encoder_type = next(encoder.parameters())
 
-        # def encode(buf):
-        #     with torch.no_grad():
-        #         buf["obs"] = encoder.encode(buf["obs"].to(encoder_type))
-        #         buf["next_obs"] = encoder.encode(buf["next_obs"].to(encoder_type))
+        def encode(buf):
+            with torch.no_grad():
+                buf["obs"] = encoder.encode(buf["obs"].to(encoder_type))
+                buf["next_obs"] = encoder.encode(buf["next_obs"].to(encoder_type))
 
-        # encode(self.buf)
+        encode(self.buf)
 
         self.observation_dim = kwargs.get("observation_dim")
         self.action_dim = kwargs.get("action_dim")
@@ -152,10 +152,6 @@ class ClevrDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         lang = self.lang_embeds[str(self.buf["obs_goal"][index].int().tolist())]
-        act = torch.nn.functional.one_hot(
-            self.buf["actions"][index : index + 1], num_classes=40
-        )
-        obs = self.buf["obs"][index : index + 1].float()
         traj = torch.concat(
             (
                 self.buf["next_obs"][index : index + 1],
@@ -166,7 +162,6 @@ class ClevrDataset(torch.utils.data.Dataset):
         return KwargsBatch(
             Batch(traj, lang), {"inpaint": {0: traj[0, self.action_dim :]}}
         )
-
 
 
 class ClevrEnd2EndDataset(torch.utils.data.Dataset):
@@ -217,7 +212,6 @@ class ClevrEnd2EndDataset(torch.utils.data.Dataset):
                 obs,
             ),
             dim=1,
-            
         )
         return KwargsBatch(
             Batch(traj, lang), {"inpaint": {0: traj[0, self.action_dim :]}}

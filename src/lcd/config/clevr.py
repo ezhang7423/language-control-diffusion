@@ -71,6 +71,6 @@ base = {
         "seed": 0,
         "benchmark": None,
         "end2end": False,
-        "llp_path": str(DATA_PATH /  "models/mlp-llp/11-20-16-latent-dim/model_58.pt"),
+        "llp_path": str(DATA_PATH / "models/mlp-llp/11-20-16-latent-dim/model_58.pt"),
     }
 }

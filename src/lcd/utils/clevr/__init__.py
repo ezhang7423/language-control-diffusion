@@ -14,6 +14,7 @@ def load_dataset(
     upscaled_state_dim=None,
     shuffle=False,
     path=None,
+    encoder=None,
 ):
     if path:
         data: dict = torch.load(path)
@@ -29,6 +30,12 @@ def load_dataset(
 
     # shift obs
     data["next_obs"] = torch.cat((data["obs"][1:], data["obs"][-1:]), dim=0)
+    encoder_type = next(encoder.parameters())
+
+    if encoder:
+        with torch.no_grad():
+            data["obs"] = encoder.encode(data["obs"].to(encoder_type))
+            data["next_obs"] = encoder.encode(data["next_obs"].to(encoder_type))
 
     if upscale:
         random = torch.randn((upscaled_state_dim, 10)).expand(

@@ -82,9 +82,9 @@ def t5_encode_tokenized_text(
     token_ids, attn_mask=None, pad_id=None, name=DEFAULT_T5_NAME
 ):
     assert exists(attn_mask) or exists(pad_id)
-    print('getting model...')
+    print("getting model...")
     t5, _ = get_model_and_tokenizer(name)
-    print('loaded model!')
+    print("loaded model!")
 
     attn_mask = default(attn_mask, lambda: (token_ids != pad_id).long())
 
@@ -105,27 +105,29 @@ def t5_encode_tokenized_text(
 def main(clevr: bool = True):
     NAME = "t5-v1_1-xxl"
     embeds = {}
-    mode = 'error'
-    
+    mode = "error"
+
     if clevr:
-        module = __import__(f"lcd.scripts.generation.{mode}_lang_clevr", fromlist=['anns', 'lang'])
+        module = __import__(
+            f"lcd.scripts.generation.{mode}_lang_clevr", fromlist=["anns", "lang"]
+        )
         anns = module.anns
         lang = module.lang
         tensor2lang = {}
         for j, v in zip(lang, anns):
             tensor2lang[str(j.int().tolist())] = v
-        
+
     else:
         anns = sum(json.load(open("/data2/eddie/calvin/annotations.json")).values(), [])
-    
-    print('begin encoding')
-    BATCH_SIZE = 256 
-    print('Total number of annotations:', len(anns))
+
+    print("begin encoding")
+    BATCH_SIZE = 256
+    print("Total number of annotations:", len(anns))
     for i in range(0, len(anns), BATCH_SIZE):
-        print(f'encoding {i} to {i+BATCH_SIZE}')
-        embeddings = t5_encode_text(anns[i:i+BATCH_SIZE], name=f"google/{NAME}")
-        for a, e in zip(anns[i:i+BATCH_SIZE], embeddings):
-            embeds[a] = e.cpu() 
+        print(f"encoding {i} to {i+BATCH_SIZE}")
+        embeddings = t5_encode_text(anns[i : i + BATCH_SIZE], name=f"google/{NAME}")
+        for a, e in zip(anns[i : i + BATCH_SIZE], embeddings):
+            embeds[a] = e.cpu()
         # embeddings = t5_encode_text(anns, name=f"google/{NAME}")
         # for a, e in zip(anns, embeddings):
         #     embeds[a] = e.cpu()

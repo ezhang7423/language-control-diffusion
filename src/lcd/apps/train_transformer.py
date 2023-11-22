@@ -4,13 +4,13 @@ from dataclasses import dataclass
 
 import torch
 import tqdm
-import wandb
 from eztils.torch import get_best_cuda
 from eztils.torch.wandb import log_wandb_distribution
 from rich import print
 from torch.distributed.elastic.multiprocessing.errors import record
 from torchinfo import summary
 
+import wandb
 from lcd import DATA_PATH
 from lcd.models.transformer import ActionTransformer
 from lcd.utils.clevr import load_dataset
@@ -36,6 +36,11 @@ class eval_args:
     num_sequences: int = 1000
 
 
+def freeze(model: torch.nn.Module):
+    for p in model.parameters():
+        p.requires_grad = True
+
+
 def main(
     seed: int = 12,
     width: int = 256,
@@ -45,6 +50,8 @@ def main(
     batch_size: int = 512,
     lr: float = 2e-5,
     use_wandb: bool = False,
+    hierarchical: bool = False,
+    low_model_path: str = str(DATA_PATH / "models" / "mlp-llp" / "model.pt"),
     skip_eval: bool = False,
 ):
     args, _, _, values = inspect.getargvalues(inspect.currentframe())
@@ -66,11 +73,18 @@ def main(
             name="transformer-clevr-single",
             config=vars(args),
         )
+    if hierarchical:
+        low = torch.load(low_model_path)
+        in_features = 16
+        out_features = 16
+    else:
+        in_features = 10
+        out_features = 40
 
     # model
     model = ActionTransformer(
-        in_features=10,
-        out_features=40,
+        in_features=in_features,
+        out_features=out_features,
         num_layers=depth,
         decoder_hidden_size=256,
         num_heads=2,
@@ -85,6 +99,7 @@ def main(
         upscaled_state_dim=0,
         upscale=False,
         shuffle=True,
+        encoder=low if hierarchical else None,
     )
 
     def get_dataloader(dataset):
@@ -112,9 +127,11 @@ def main(
     ret = evaluate(
         DryEvalArgs(
             high_model_path=str(exp_path / f"model_initial.pt"),
+            low_model_path=low_model_path,
             transformer=True,
+            only_hlp=not hierarchical,
         ),
-        eval_all=True,
+        eval_all=False,
         skip_eval=False,
         num_processes=1,
     )
@@ -127,7 +144,6 @@ def main(
         get_best_cuda()
     )  # TODO make get_best_cuda return string directly
     model.to(device)
-
     model.train()
 
     from torch.nn import functional as F
@@ -145,11 +161,13 @@ def main(
             evaluate(
                 DryEvalArgs(
                     high_model_path=str(model_path),
-                    transformer=True,
                     num_sequences=100,
+                    low_model_path=low_model_path,
+                    transformer=True,
+                    only_hlp=not hierarchical,
                 ),
                 skip_eval=False,
-                num_processes=1
+                num_processes=1,
             )
         )
 
@@ -159,7 +177,8 @@ def main(
                 # batch = preprocess_batch(next(dataloader), device)
                 extra_stats = {}
                 batch = next(dataloader).to(device).float()
-                
+
+                #! change this train part
                 pred = model.forward(
                     # torch.concat((batch["obs"], batch["next_obs"]), dim=-1)
                     batch["obs"],
@@ -174,12 +193,15 @@ def main(
                 # pred = model.forward(
                 #     traj[:, 32:], batch.conditions.repeat_interleave(4, dim=0)
                 # ).to(device)
-                act_int = batch["actions"].to(torch.int64)
-                loss = F.cross_entropy(pred, act_int)
-                if log_val:
-                    correct = pred.argmax(dim=1) == act_int
-                    extra_stats["eval/acc"] = sum(correct) / len(correct)
-                    log_wandb_distribution("predictions", pred.reshape(-1))
+                if hierarchical:
+                    loss = F.mse_loss(pred, batch["next_obs"])
+                else:
+                    act_int = batch["actions"].to(torch.int64)
+                    loss = F.cross_entropy(pred, act_int)
+                    if log_val:
+                        correct = pred.argmax(dim=1) == act_int
+                        extra_stats["eval/acc"] = sum(correct) / len(correct)
+                        log_wandb_distribution("predictions", pred.reshape(-1))
                 # print(loss)
                 return loss, extra_stats
 
@@ -197,9 +219,11 @@ def main(
         evaluate(
             DryEvalArgs(
                 high_model_path=str(model_path),
-                only_hlp_transformer=True,
+                low_model_path=low_model_path,
+                transformer=True,
+                only_hlp=not hierarchical,
             ),
-            # eval_all=True,     # TODO fix tomorrow morning by getting the right embeddings
+            eval_all=True,
         )
     )
 
