@@ -46,7 +46,8 @@ def prepare_initial_observation(eval_arg: EvalArgs, ds_idx):
         from serialize_scene_struct import deserialize
 
         struct = deserialize(eval_arg.dataset["scene_struct"][ds_idx].numpy())
-        obs = eval_arg.env.envs[0].unwrapped.reset(scene_struct=struct)
+        eval_arg.env.envs[0].unwrapped.reset(scene_struct=struct)
+        obs = eval_arg.env.envs[0].unwrapped.reset_mdp_utils(obs_goal=eval_arg.dataset["obs_goal"][ds_idx].int().tolist())
     else:
         obs = eval_arg.env.envs[0].unwrapped.reset()
     return obs
@@ -54,17 +55,19 @@ def prepare_initial_observation(eval_arg: EvalArgs, ds_idx):
 
 def perform_evaluation_step(eval_arg: EvalArgs, obs, next_obs, ds_idx):
     action = eval_arg.model(obs, next_obs).argmax()[None]
+    # action = eval_arg.dataset["actions"][ds_idx : ds_idx + 1]
     obs, rewards, dones, info = eval_arg.env.step(action)
     obs = obs[0]
 
     p_obs = preprocess_obs(obs)
 
     if eval_arg.only_llp:
-        l1_error = (p_obs - next_obs).abs().mean()
-        print("a_hat:", action)
-        print("a:", eval_arg.dataset["actions"][ds_idx])
-        print("l1 error:", (p_obs - next_obs).abs().mean())
-
+        l1_error = (p_obs - next_obs).abs()
+        print("a_hat:", action.item())
+        print("a:", eval_arg.dataset["actions"][ds_idx].item())
+        # print('r:', eval_arg.dataset['rewards'][ds_idx].item())
+        print("l1 error:",l1_error.mean().item())
+        
     return dones
 
 
@@ -92,7 +95,10 @@ def use_json_config(
     )
 
     return use_config(callback=callback, param_name=param_name, param_help=param_help)
-
+def find_next_start(ds, ds_idx):
+    while not ds["dones"][ds_idx]:
+        ds_idx += 1
+    return ds_idx + 1
 
 @app.command()
 @use_json_config()
@@ -112,8 +118,9 @@ def eval_single_process(
     print(
         f"{mode=} {low_model_path=}, {high_model_path=}, {dataset_path=}, {num_sequences=}, {max_episode_steps=}, {silent=}, {only_llp=} {transformer=}"
     )
-
-    if transformer and only_hlp:
+    if only_llp:
+        model = LLPEvaluationWrapper(torch.load(low_model_path, map_location="cpu"))        
+    elif transformer and only_hlp:
         model = TransformerWrapper(torch.load(high_model_path, map_location="cpu"))
     elif transformer:
         model = TransformerHierarchicalWrapper(
@@ -149,6 +156,8 @@ def eval_single_process(
     ds_idx = 0
     ds = eval_arg.dataset
     for i in range(eval_arg.num_sequences):
+        if ds is not None:
+            ds_idx = find_next_start(ds, ds_idx)
         obs = prepare_initial_observation(eval_arg, ds_idx)
         succ = False
         itr = range(eval_arg.max_episode_steps - 1)
@@ -163,6 +172,11 @@ def eval_single_process(
             if dones:
                 succ = True
                 break
+            
+            if ds is not None and ds['dones'][ds_idx]:
+                succ = False
+                break
+            
             ds_idx += 1
 
         success.append(succ)
@@ -270,7 +284,6 @@ class LLPEvaluationWrapper(nn.Module):
 
     def forward(self, obs, next_obs):
         obs = preprocess_obs(obs)
-        next_obs = preprocess_obs(next_obs)
         return self.low(obs.to(self.p), next_obs.to(self.p))
 
 

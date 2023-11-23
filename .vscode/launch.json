@@ -13,6 +13,16 @@
           "console": "integratedTerminal",
           "args": ["--benchmark", "clevr"],
           "justMyCode": true
+        },
+        {
+          "name": "run eval",
+          "type": "python",
+          "request": "launch",
+          // "program": "${file}",
+          "program": "${workspaceFolder}/src/lcd/apps/eval_all.py",
+          "console": "integratedTerminal",
+          "args": ["--no-transformer", "--no-diffuser", "--no-lcd"],
+          "justMyCode": true
         }
     ]
 }

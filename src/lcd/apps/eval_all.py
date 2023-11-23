@@ -38,13 +38,14 @@ def fmt(mean, std):
     # return f'{mean[0]} ± {std[0]}'
     mean *= 100
     std *= 100
-    return f"{mean:.1f}% ± {std:.1f}"
+    return f"{mean:.1f} ± {std:.1f}"
 
 
 def main(
+    llp: bool = False,
     transformer: bool = False,
-    diffuser: bool = True,
-    lcd: bool = True,
+    diffuser: bool = False,
+    lcd: bool = False,
     hierarchical: bool = True,
 ):
     seed_everything(0)
@@ -64,6 +65,19 @@ def main(
 
         raw[model] = results.tolist()
         return new_df
+
+    ###################
+    # llp
+    ###################
+    if llp:
+        ret = evaluate(
+            DryEvalArgs(
+                dataset_path=DATA_PATH / "ball_llp_eval.pt",
+                num_sequences=100,                        
+            ),
+            num_processes=1
+        )
+        print("LLP results:", ret)
 
     ###################
     # e2e transformer
@@ -107,10 +121,51 @@ def main(
     # lcd
     ###################
 
+    if lcd:
+        print("Evaluating lcd...")
+
+        path = MODEL_PATH / "lcd"
+        args = DryEvalArgs(
+            num_sequences=2,
+            only_hlp=False,
+            transformer=False,
+        )
+
+        mean, std, results = eval_over_seeds(
+            path,
+            "high_model_path",
+            model_file="model_200000.pt",
+            args=args,
+            num_processes=50,
+        )
+
+        df = add_to_df("lcd", mean, std, results)
+
     ###################
     # hierarchical transformer
     ###################
 
+    if hierarchical:
+        print("Evaluating hierarchical transformer...")
+
+        path = MODEL_PATH / "hierarchical-transformer/"
+        args = DryEvalArgs(
+            num_sequences=100,
+            only_hlp=False,
+            transformer=True,
+            dataset_path=None,
+        )
+
+        mean, std, results = eval_over_seeds(
+            path,
+            "high_model_path",
+            model_file="model_9.pt",
+            args=args,
+            num_processes=1,
+        )
+
+        df = add_to_df("hierarchical", mean, std, results)
+        
     ###################
     # save results
     ###################

@@ -26,13 +26,15 @@ def load_dataset(
             data: dict = torch.load(DATA_PATH / "ball_buf.pt", map_location="cpu")
 
     del data["language_goal"]
+    
     data = td(data, data["actions"].shape[0])
 
     # shift obs
     data["next_obs"] = torch.cat((data["obs"][1:], data["obs"][-1:]), dim=0)
-    encoder_type = next(encoder.parameters())
+
 
     if encoder:
+        encoder_type = next(encoder.parameters())
         with torch.no_grad():
             data["obs"] = encoder.encode(data["obs"].to(encoder_type))
             data["next_obs"] = encoder.encode(data["next_obs"].to(encoder_type))

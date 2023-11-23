@@ -178,7 +178,6 @@ def main(
                 extra_stats = {}
                 batch = next(dataloader).to(device).float()
 
-                #! change this train part
                 pred = model.forward(
                     # torch.concat((batch["obs"], batch["next_obs"]), dim=-1)
                     batch["obs"],

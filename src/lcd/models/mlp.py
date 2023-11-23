@@ -37,7 +37,7 @@ class ForwardModel(nn.Module):
         self.depth = len(num_units)
 
     def forward(self, obs, next_obs):
-        # Concatenate obs and next_obs along the feature dimension
+        # Concatenate obs and next_obs along the feature dimension        
         combined_input = torch.cat([obs, next_obs], dim=0)
 
         # Pass the combined input through encoder
